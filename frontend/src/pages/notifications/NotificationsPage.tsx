@@ -1,4 +1,9 @@
-import { useMyNotifications, useMarkNotificationAsRead } from "@/hooks";
+import { useState } from "react";
+import {
+  useMyNotifications,
+  useMarkNotificationAsRead,
+  useMarkAllNotificationsAsRead,
+} from "@/hooks";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -9,50 +14,96 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bell, Check, Eye } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Bell, Check, CheckCheck, Eye, Loader2 } from "lucide-react";
 import { formatDate } from "@/utils/date";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
 
 export default function NotificationsPage() {
-  const { data: notificationsResponse, isLoading } = useMyNotifications();
+  const [filter, setFilter] = useState<"all" | "unread">("all");
+  const {
+    data: notificationsResponse,
+    isLoading,
+    refetch,
+  } = useMyNotifications({
+    isRead: filter === "unread" ? false : undefined,
+  });
   const markAsRead = useMarkNotificationAsRead();
+  const markAllAsRead = useMarkAllNotificationsAsRead();
 
   const notifications = notificationsResponse?.data?.data || [];
   const unreadCount = notificationsResponse?.data?.unreadCount || 0;
 
   const handleMarkAsRead = async (notificationId: string) => {
-    // NULL CHECK: Validate notificationId
-    if (!notificationId) {
+    if (!notificationId || markAsRead.isPending) {
       toast.error("Invalid notification");
-      return;
-    }
-
-    // DOUBLE-CLICK PREVENTION: Check pending state
-    if (markAsRead.isPending) {
       return;
     }
 
     try {
       await markAsRead.mutateAsync(notificationId);
-      toast.success("Notification marked as read");
     } catch (error: any) {
       toast.error("Failed to mark notification as read");
     }
   };
 
+  const handleMarkAllAsRead = async () => {
+    if (markAllAsRead.isPending || unreadCount === 0) {
+      return;
+    }
+
+    try {
+      await markAllAsRead.mutateAsync();
+      toast.success("All notifications marked as read");
+      refetch();
+    } catch (error: any) {
+      toast.error("Failed to mark all as read");
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Notifications</h1>
           <p className="text-muted-foreground">
             Stay updated with the latest events and activities
           </p>
         </div>
-        {unreadCount > 0 && (
-          <Badge variant="default">{unreadCount} Unread</Badge>
-        )}
+        <div className="flex items-center gap-3">
+          {unreadCount > 0 && (
+            <Badge variant="default">{unreadCount} Unread</Badge>
+          )}
+          {unreadCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleMarkAllAsRead}
+              disabled={markAllAsRead.isPending}
+            >
+              {markAllAsRead.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCheck className="mr-2 h-4 w-4" />
+              )}
+              Mark All Read
+            </Button>
+          )}
+        </div>
       </div>
+
+      <Tabs
+        value={filter}
+        onValueChange={(v) => setFilter(v as "all" | "unread")}
+      >
+        <TabsList>
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="unread">
+            Unread {unreadCount > 0 && `(${unreadCount})`}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {isLoading ? (
         <div className="space-y-4">
@@ -68,9 +119,15 @@ export default function NotificationsPage() {
       ) : notifications.length === 0 ? (
         <div className="text-center py-12">
           <Bell className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h3 className="mt-4 text-lg font-semibold">No notifications</h3>
+          <h3 className="mt-4 text-lg font-semibold">
+            {filter === "unread"
+              ? "No unread notifications"
+              : "No notifications"}
+          </h3>
           <p className="text-muted-foreground">
-            You're all caught up! Check back later for updates
+            {filter === "unread"
+              ? "You're all caught up!"
+              : "Check back later for updates"}
           </p>
         </div>
       ) : (
@@ -78,7 +135,9 @@ export default function NotificationsPage() {
           {notifications.map((notification: any) => (
             <Card
               key={notification._id}
-              className={!notification.isRead ? "border-primary/50" : ""}
+              className={
+                !notification.isRead ? "border-primary/50 bg-primary/5" : ""
+              }
             >
               <CardHeader>
                 <div className="flex items-start justify-between gap-4">
@@ -92,6 +151,9 @@ export default function NotificationsPage() {
                           New
                         </Badge>
                       )}
+                      <Badge variant="outline" className="text-xs">
+                        {notification.type}
+                      </Badge>
                     </div>
                     <CardDescription>
                       {formatDate(notification.createdAt)}
@@ -102,6 +164,7 @@ export default function NotificationsPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => handleMarkAsRead(notification._id)}
+                      disabled={markAsRead.isPending}
                     >
                       <Check className="mr-2 h-4 w-4" />
                       Mark as Read
@@ -109,14 +172,14 @@ export default function NotificationsPage() {
                   )}
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-3">
                 <p className="text-muted-foreground">{notification.message}</p>
-                {notification.actionUrl && (
-                  <Button variant="link" className="mt-2 p-0" asChild>
-                    <a href={notification.actionUrl}>
+                {notification.relatedEvent && (
+                  <Button variant="link" className="p-0 h-auto" asChild>
+                    <Link to={`/events/${notification.relatedEvent}`}>
                       <Eye className="mr-2 h-4 w-4" />
-                      View Details
-                    </a>
+                      View Event
+                    </Link>
                   </Button>
                 )}
               </CardContent>

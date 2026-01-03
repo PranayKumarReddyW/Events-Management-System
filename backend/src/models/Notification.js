@@ -95,7 +95,6 @@ const notificationSchema = new mongoose.Schema(
 
 notificationSchema.index({ recipient: 1, createdAt: -1 });
 notificationSchema.index({ sentBy: 1, createdAt: -1 });
-notificationSchema.index({ type: 1 });
 
 notificationSchema.pre("save", function (next) {
   if (this.isModified("isRead") && this.isRead && !this.readAt) {

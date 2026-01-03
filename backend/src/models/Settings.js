@@ -50,7 +50,6 @@ const settingsSchema = new mongoose.Schema(
 );
 
 // Indexes
-settingsSchema.index({ key: 1 });
 settingsSchema.index({ category: 1 });
 settingsSchema.index({ isPublic: 1 });
 

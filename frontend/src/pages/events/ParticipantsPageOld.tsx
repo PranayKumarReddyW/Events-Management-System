@@ -236,10 +236,6 @@ export default function ParticipantsPage() {
     <div className="container mx-auto py-8 px-4">
       {/* Header */}
       <div className="mb-6">
-        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
         <h1 className="text-3xl font-bold mb-2">Event Participants</h1>
         {event && (
           <p className="text-muted-foreground">

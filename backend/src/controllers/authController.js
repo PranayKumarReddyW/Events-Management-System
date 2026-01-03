@@ -14,7 +14,7 @@ const generateToken = (id) => {
   });
 };
 
-// Register user
+// Register user (PUBLIC - STUDENTS ONLY)
 exports.register = async (req, res, next) => {
   try {
     const {
@@ -22,7 +22,6 @@ exports.register = async (req, res, next) => {
       email,
       password,
       phone,
-      role,
       departmentId,
       yearOfStudy,
       rollNumber,
@@ -34,13 +33,14 @@ exports.register = async (req, res, next) => {
       return next(new AppError("Email already registered", 400));
     }
 
-    // Create user
+    // SECURITY: Public registration is ONLY for students
+    // Ignore any role field sent from client
     const user = await User.create({
       fullName,
       email,
       password,
       phone,
-      role: role || "student",
+      role: "student", // ALWAYS student for public registration
       departmentId,
       yearOfStudy,
       rollNumber,
@@ -59,18 +59,18 @@ exports.register = async (req, res, next) => {
     });
 
     // Send welcome email
-    if (process.env.ENABLE_EMAIL_NOTIFICATIONS === "true") {
-      try {
-        await sendEmail({
-          to: user.email,
-          subject: "Welcome to Event Management System",
-          template: "welcome",
-          data: { name: user.fullName },
-        });
-      } catch (emailError) {
-        logger.error("Failed to send welcome email:", emailError);
-      }
-    }
+    // if (process.env.ENABLE_EMAIL_NOTIFICATIONS === "true") {
+    //   try {
+    //     await sendEmail({
+    //       to: user.email,
+    //       subject: "Welcome to Event Management System",
+    //       template: "welcome",
+    //       data: { name: user.fullName },
+    //     });
+    //   } catch (emailError) {
+    //     logger.error("Failed to send welcome email:", emailError);
+    //   }
+    // }
 
     res.status(201).json({
       success: true,
@@ -331,6 +331,79 @@ exports.resetPassword = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: "Password reset successful",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Create user (ADMIN ONLY - for Faculty/Department Organizer)
+exports.createUser = async (req, res, next) => {
+  try {
+    const {
+      fullName,
+      email,
+      password,
+      phone,
+      role,
+      departmentId,
+      yearOfStudy,
+      rollNumber,
+    } = req.body;
+
+    // Validate role - cannot create admin or super_admin
+    const allowedRoles = ["faculty", "department_organizer"];
+    if (!allowedRoles.includes(role)) {
+      return next(
+        new AppError(
+          "Can only create Faculty or Department Organizer accounts",
+          400
+        )
+      );
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return next(new AppError("Email already registered", 400));
+    }
+
+    // Create user
+    const user = await User.create({
+      fullName,
+      email,
+      password,
+      phone,
+      role,
+      departmentId,
+      yearOfStudy,
+      rollNumber,
+      isActive: true,
+    });
+
+    // Send email notification
+    if (process.env.ENABLE_EMAIL_NOTIFICATIONS === "true") {
+      try {
+        await sendEmail({
+          to: user.email,
+          subject: "Account Created - Event Management System",
+          template: "account_created",
+          data: {
+            name: user.fullName,
+            email: user.email,
+            password: password,
+            role: role,
+          },
+        });
+      } catch (emailError) {
+        logger.error("Failed to send account creation email:", emailError);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "User created successfully",
+      data: { user },
     });
   } catch (error) {
     next(error);

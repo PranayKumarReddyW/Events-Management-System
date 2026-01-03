@@ -188,6 +188,14 @@ exports.generateCertificates = asyncHandler(async (req, res) => {
     }
   }
 
+  // Mark event certificates as generated
+  if (generatedCertificates.length > 0) {
+    await Event.findByIdAndUpdate(eventId, {
+      certificatesGenerated: true,
+      certificatesGeneratedAt: new Date(),
+    });
+  }
+
   res.status(200).json({
     success: true,
     data: {

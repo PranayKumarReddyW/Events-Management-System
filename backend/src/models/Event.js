@@ -266,6 +266,14 @@ const eventSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    certificatesGenerated: {
+      type: Boolean,
+      default: false,
+    },
+    certificatesGeneratedAt: {
+      type: Date,
+      default: null,
+    },
     approvalStatus: {
       type: String,
       enum: {
@@ -283,7 +291,6 @@ const eventSchema = new mongoose.Schema(
 );
 
 // Indexes
-eventSchema.index({ slug: 1 });
 eventSchema.index({ organizerId: 1 });
 eventSchema.index({ clubId: 1 });
 eventSchema.index({ departmentId: 1 });
@@ -319,6 +326,48 @@ eventSchema.pre("save", function (next) {
     return next(
       new Error("Registration deadline must be before event start date")
     );
+  }
+  next();
+});
+
+// Validate status transitions
+eventSchema.pre("save", function (next) {
+  // Only validate if status is being modified and document already exists
+  if (!this.isModified("status") || this.isNew) {
+    return next();
+  }
+
+  const validTransitions = {
+    draft: ["published", "cancelled"],
+    published: ["ongoing", "cancelled"],
+    ongoing: ["completed", "cancelled"],
+    completed: [], // Cannot transition from completed
+    cancelled: [], // Cannot transition from cancelled
+  };
+
+  const oldStatus = this._original?.status || this._doc.status;
+  const newStatus = this.status;
+
+  if (oldStatus && oldStatus !== newStatus) {
+    const allowed = validTransitions[oldStatus] || [];
+    if (!allowed.includes(newStatus)) {
+      return next(
+        new Error(
+          `Invalid status transition from '${oldStatus}' to '${newStatus}'. Allowed: ${
+            allowed.join(", ") || "none"
+          }`
+        )
+      );
+    }
+  }
+
+  next();
+});
+
+// Store original document for comparison in pre-save hooks
+eventSchema.pre("save", function (next) {
+  if (!this.isNew && !this._original) {
+    this._original = this.constructor.findById(this._id).lean();
   }
   next();
 });

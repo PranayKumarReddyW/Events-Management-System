@@ -298,14 +298,35 @@ exports.getEvent = async (req, res, next) => {
       }
     }
 
-    // Cache event
+    // If user is logged in, check if they have registered for this event
+    let eventWithRegistrationStatus = event.toObject();
+    if (req.user) {
+      const userRegistration = await EventRegistration.findOne({
+        user: req.user._id,
+        event: event._id,
+        status: { $in: ["pending", "confirmed", "waitlisted"] }, // Exclude cancelled/rejected
+      }).select("status");
+
+      if (userRegistration) {
+        eventWithRegistrationStatus.isRegistered = true;
+        eventWithRegistrationStatus.registrationStatus = userRegistration.status;
+      } else {
+        eventWithRegistrationStatus.isRegistered = false;
+        eventWithRegistrationStatus.registrationStatus = null;
+      }
+    } else {
+      eventWithRegistrationStatus.isRegistered = false;
+      eventWithRegistrationStatus.registrationStatus = null;
+    }
+
+    // Cache event (without registration status to keep cache shared)
     if (redis) {
       await redis.setex(`event:${id}`, 1800, JSON.stringify(event)); // Cache for 30 minutes
     }
 
     res.status(200).json({
       success: true,
-      data: { event },
+      data: { event: eventWithRegistrationStatus },
     });
   } catch (error) {
     next(error);
@@ -329,6 +350,101 @@ exports.updateEvent = async (req, res, next) => {
       !["admin", "super_admin"].includes(req.user.role)
     ) {
       return next(new AppError("Access denied", 403));
+    }
+
+    // CRITICAL: Check if event has already started - lock critical fields
+    const eventHasStarted = new Date() >= new Date(event.startDateTime);
+    const eventIsOngoing = new Date() >= new Date(event.startDateTime) && new Date() <= new Date(event.endDateTime);
+    const eventHasEnded = new Date() > new Date(event.endDateTime);
+
+    // Lock critical fields once event starts
+    if (eventHasStarted) {
+      const lockedFields = [
+        'title', 'eventType', 'startDateTime', 'endDateTime',
+        'minTeamSize', 'maxTeamSize', 'isPaid', 'amount',
+        'eligibility', 'eligibleYears', 'eligibleDepartments',
+        'allowExternalStudents', 'requiresApproval'
+      ];
+      
+      for (const field of lockedFields) {
+        if (req.body[field] !== undefined && req.body[field] !== event[field]) {
+          // Allow array comparison for eligibleYears and eligibleDepartments
+          if ((field === 'eligibleYears' || field === 'eligibleDepartments') && 
+              Array.isArray(req.body[field]) && Array.isArray(event[field]) &&
+              JSON.stringify(req.body[field].sort()) === JSON.stringify(event[field].sort())) {
+            continue; // Arrays are same, allow
+          }
+          return next(
+            new AppError(
+              `Cannot modify ${field} after event has started. Only registration management, venue, and description updates are allowed.`,
+              400
+            )
+          );
+        }
+      }
+    }
+
+    // Prevent extending registration deadline past current time if already closed
+    if (req.body.registrationDeadline) {
+      const newDeadline = new Date(req.body.registrationDeadline);
+      const oldDeadline = new Date(event.registrationDeadline);
+      const now = new Date();
+      
+      if (oldDeadline < now && newDeadline > now) {
+        return next(
+          new AppError(
+            "Cannot extend registration deadline after it has already passed. This ensures fairness to all participants.",
+            400
+          )
+        );
+      }
+    }
+
+    // Validate maxParticipants cannot be reduced below current confirmed registrations
+    if (req.body.maxParticipants !== undefined && req.body.maxParticipants < event.maxParticipants) {
+      const confirmedCount = await EventRegistration.countDocuments({
+        event: event._id,
+        status: { $in: ['confirmed', 'pending'] }
+      });
+      
+      if (req.body.maxParticipants < confirmedCount) {
+        return next(
+          new AppError(
+            `Cannot reduce participant limit to ${req.body.maxParticipants}. There are already ${confirmedCount} confirmed registrations.`,
+            400
+          )
+        );
+      }
+    }
+
+    // Validate event status transitions
+    if (req.body.status && req.body.status !== event.status) {
+      const validTransitions = {
+        draft: ['published', 'cancelled'],
+        published: ['ongoing', 'cancelled'],
+        ongoing: ['completed', 'cancelled'],
+        completed: [], // Cannot transition from completed
+        cancelled: [] // Cannot transition from cancelled
+      };
+      
+      if (!validTransitions[event.status].includes(req.body.status)) {
+        return next(
+          new AppError(
+            `Invalid status transition from ${event.status} to ${req.body.status}. Allowed transitions: ${validTransitions[event.status].join(', ') || 'none'}.`,
+            400
+          )
+        );
+      }
+    }
+
+    // Auto-transition status to 'ongoing' if event has started
+    if (eventIsOngoing && event.status === 'published' && !req.body.status) {
+      req.body.status = 'ongoing';
+    }
+
+    // Auto-transition status to 'completed' if event has ended
+    if (eventHasEnded && (event.status === 'ongoing' || event.status === 'published') && !req.body.status) {
+      req.body.status = 'completed';
     }
 
     // Check for duplicate title if title is being updated

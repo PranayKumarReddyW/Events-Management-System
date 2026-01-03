@@ -195,13 +195,6 @@ export interface Team {
   isFull?: boolean;
 }
 
-export interface TeamResponse {
-  success: boolean;
-  data: Team;
-  message?: string;
-  inviteCode?: string;
-}
-
 // Registration types
 export interface EmergencyContact {
   name: string | null;

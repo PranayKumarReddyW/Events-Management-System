@@ -21,7 +21,7 @@ export default function CertificatesPage() {
   const [search, setSearch] = useState("");
   const { data: certificatesResponse, isLoading } = useCertificates();
 
-  const certificates = certificatesResponse?.data?.certificates || [];
+  const certificates = certificatesResponse?.data?.data?.certificates || [];
 
   const handleDownload = async (
     certificateId: string,

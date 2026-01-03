@@ -193,6 +193,13 @@ async function joinTeam({ token, inviteCode }) {
   return unwrap(res);
 }
 
+async function lockTeam({ token, teamId }) {
+  const res = await request("put", `/teams/${teamId}/lock`, {
+    token,
+  });
+  return unwrap(res);
+}
+
 async function registerForEvent({ token, eventId, teamId }) {
   const res = await request("post", "/registrations", {
     token,
@@ -374,25 +381,102 @@ async function main() {
 
   // Connect to MongoDB for direct database operations
   const mongoUri =
-    process.env.MONGO_URI || "mongodb://localhost:27017/event-management";
+    process.env.MONGODB_URI || "mongodb://localhost:27017/event-management";
   await mongoose.connect(mongoUri);
   console.log(`[seed] Connected to MongoDB`);
 
-  // Realistic Users - Organizers
-  const organizer1 = await registerOrLogin({
-    fullName: "Dr. Rajesh Kumar",
+  // ====================
+  // 1. CREATE ADMIN USER
+  // ====================
+  console.log("\n[seed] 👑 Creating Admin User...");
+  const User = require("../models/User");
+
+  let admin = await User.findOne({ email: "admin@university.edu" });
+  if (!admin) {
+    admin = await User.create({
+      fullName: "System Administrator",
+      email: "admin@university.edu",
+      password: DEFAULT_PASSWORD,
+      phone: "9999999999",
+      role: "admin",
+      isActive: true,
+    });
+    console.log(`[seed] ✓ Created admin: ${admin.email}`);
+  } else {
+    console.log(`[seed] ℹ️  Admin already exists: ${admin.email}`);
+  }
+
+  // ====================
+  // 2. CREATE DEPARTMENT ORGANIZERS
+  // ====================
+  console.log("\n[seed] 🎓 Creating Department Organizers...");
+  const jwt = require("jsonwebtoken");
+  const Session = require("../models/Session");
+
+  let organizer1 = await User.findOne({
     email: process.env.SEED_ORGANIZER_EMAIL || "rajesh.kumar@university.edu",
-    phone: "9876543210",
-    role: "department_organizer",
+  });
+  if (!organizer1) {
+    organizer1 = await User.create({
+      fullName: "Dr. Rajesh Kumar",
+      email: process.env.SEED_ORGANIZER_EMAIL || "rajesh.kumar@university.edu",
+      password: DEFAULT_PASSWORD,
+      phone: "9876543210",
+      role: "department_organizer",
+      isActive: true,
+    });
+    console.log(`[seed] ✓ Created organizer: ${organizer1.email}`);
+  } else {
+    console.log(`[seed] ℹ️  Organizer already exists: ${organizer1.email}`);
+  }
+  const organizer1Token = jwt.sign(
+    { id: organizer1._id },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+  // Delete old sessions and create new session for organizer1
+  await Session.deleteMany({ userId: organizer1._id });
+  await Session.create({
+    userId: organizer1._id,
+    token: organizer1Token,
+    ip: "127.0.0.1",
+    device: "seed-script",
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
   });
 
-  const organizer2 = await registerOrLogin({
-    fullName: "Prof. Anita Sharma",
-    email: "anita.sharma@university.edu",
-    phone: "9876543211",
-    role: "department_organizer",
+  let organizer2 = await User.findOne({ email: "anita.sharma@university.edu" });
+  if (!organizer2) {
+    organizer2 = await User.create({
+      fullName: "Prof. Anita Sharma",
+      email: "anita.sharma@university.edu",
+      password: DEFAULT_PASSWORD,
+      phone: "9876543211",
+      role: "department_organizer",
+      isActive: true,
+    });
+    console.log(`[seed] ✓ Created organizer: ${organizer2.email}`);
+  } else {
+    console.log(`[seed] ℹ️  Organizer already exists: ${organizer2.email}`);
+  }
+  const organizer2Token = jwt.sign(
+    { id: organizer2._id },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+  // Delete old sessions and create new session for organizer2
+  await Session.deleteMany({ userId: organizer2._id });
+  await Session.create({
+    userId: organizer2._id,
+    token: organizer2Token,
+    ip: "127.0.0.1",
+    device: "seed-script",
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
   });
 
+  // ====================
+  // 3. CREATE STUDENTS VIA PUBLIC REGISTRATION
+  // ====================
+  console.log("\n[seed] 👨‍🎓 Creating Students...");
   // Realistic Students - Computer Science
   const students = [];
   const studentData = [
@@ -514,7 +598,7 @@ async function main() {
 
   // Event 1: Tech Hackathon (Team Event - Upcoming)
   const hackathon = await getOrCreateEvent({
-    token: organizer1.token,
+    token: organizer1Token,
     event: {
       title: "TechVerse Hackathon 2025",
       description:
@@ -541,11 +625,11 @@ async function main() {
       tags: ["hackathon", "coding", "tech"],
     },
   });
-  await publishEvent({ token: organizer1.token, eventId: hackathon._id });
+  await publishEvent({ token: organizer1Token, eventId: hackathon._id });
 
   // Event 2: AI/ML Workshop (Solo Event - Future)
   const mlWorkshop = await getOrCreateEvent({
-    token: organizer2.token,
+    token: organizer2Token,
     event: {
       title: "Introduction to Machine Learning & Deep Learning",
       description:
@@ -574,11 +658,11 @@ async function main() {
       tags: ["workshop", "AI", "machine-learning"],
     },
   });
-  await publishEvent({ token: organizer2.token, eventId: mlWorkshop._id });
+  await publishEvent({ token: organizer2Token, eventId: mlWorkshop._id });
 
   // Event 3: Cultural Fest (Team Event - Future)
   const culturalFest = await getOrCreateEvent({
-    token: organizer1.token,
+    token: organizer1Token,
     event: {
       title: "Spring Fest 2025 - Dance Competition",
       description:
@@ -615,11 +699,11 @@ async function main() {
       tags: ["cultural", "dance", "competition"],
     },
   });
-  await publishEvent({ token: organizer1.token, eventId: culturalFest._id });
+  await publishEvent({ token: organizer1Token, eventId: culturalFest._id });
 
   // Event 4: Tech Talk (Solo Event - Future)
   const techTalk = await getOrCreateEvent({
-    token: organizer2.token,
+    token: organizer2Token,
     event: {
       title: "Career in Cloud Computing & DevOps",
       description:
@@ -647,11 +731,11 @@ async function main() {
       tags: ["seminar", "cloud", "career"],
     },
   });
-  await publishEvent({ token: organizer2.token, eventId: techTalk._id });
+  await publishEvent({ token: organizer2Token, eventId: techTalk._id });
 
   // Event 5: Sports Tournament (Team Event - Past/Completed for testing)
   const sportsEvent = await getOrCreateEvent({
-    token: organizer1.token,
+    token: organizer1Token,
     event: {
       title: "Inter-Department Cricket Tournament 2024",
       description:
@@ -678,7 +762,7 @@ async function main() {
       status: "completed",
     },
   });
-  await publishEvent({ token: organizer1.token, eventId: sportsEvent._id });
+  await publishEvent({ token: organizer1Token, eventId: sportsEvent._id });
 
   console.log("[seed] Created 5 diverse events");
 
@@ -736,6 +820,14 @@ async function main() {
   teams.push(team4);
 
   console.log(`[seed] Created ${teams.length} teams for hackathon`);
+
+  // Lock all teams before registration
+  console.log("[seed] Locking teams...");
+  await lockTeam({ token: students[0].token, teamId: team1._id }); // Arjun locks team1
+  await lockTeam({ token: students[4].token, teamId: team2._id }); // Rahul locks team2
+  await lockTeam({ token: students[7].token, teamId: team3._id }); // Neha locks team3
+  await lockTeam({ token: students[9].token, teamId: team4._id }); // Anjali locks team4
+  console.log("[seed] All teams locked");
 
   // Register teams for hackathon
   console.log("[seed] Registering teams for hackathon...");
@@ -849,6 +941,10 @@ async function main() {
     });
   }
 
+  // Lock team before registration
+  await lockTeam({ token: students[0].token, teamId: danceTeam1._id });
+  console.log("[seed] Cultural fest team locked");
+
   const culturalRegs = [];
   for (let i = 0; i < 7; i++) {
     const reg = await registerForEvent({
@@ -901,6 +997,10 @@ async function main() {
     });
   }
 
+  // Lock team before registration
+  await lockTeam({ token: students[4].token, teamId: cricketTeam._id });
+  console.log("[seed] Cricket team locked");
+
   // Register cricket team (students 4-14)
   for (let i = 4; i < 15; i++) {
     await registerForEvent({
@@ -914,7 +1014,7 @@ async function main() {
   try {
     for (let i = 4; i < 15; i++) {
       await organizerCheckIn({
-        token: organizer1.token,
+        token: organizer1Token,
         eventId: sportsEvent._id,
         userId: students[i].user._id,
       });
@@ -928,7 +1028,7 @@ async function main() {
   // Generate certificates for completed event
   try {
     const certResult = await generateCertificates({
-      token: organizer1.token,
+      token: organizer1Token,
       eventId: sportsEvent._id,
     });
     console.log(
@@ -962,7 +1062,7 @@ async function main() {
   console.log("[seed] Creating notifications...");
   try {
     await createNotification({
-      token: organizer1.token,
+      token: organizer1Token,
       recipients: students.slice(0, 13).map((s) => s.user._id),
       title: "TechVerse Hackathon Reminder",
       message:
@@ -970,7 +1070,7 @@ async function main() {
     });
 
     await request("post", `/notifications/bulk/event/${hackathon._id}`, {
-      token: organizer1.token,
+      token: organizer1Token,
       data: {
         title: "Team Registration Confirmed",
         message:
@@ -989,6 +1089,7 @@ async function main() {
   // eslint-disable-next-line no-console
   console.log("\n[seed] ✅ Database seeding completed successfully!");
   console.log("\n[seed] 📊 Summary:");
+  console.log(`   • Admin: ${admin.email} / ${DEFAULT_PASSWORD}`);
   console.log(
     `   • Organizers: 2 (${organizer1.user.email}, ${organizer2.user.email})`
   );
@@ -1011,6 +1112,7 @@ async function main() {
     }`
   );
   console.log("\n[seed] 🎯 Test Users:");
+  console.log(`   Admin: admin@university.edu / ${DEFAULT_PASSWORD}`);
   console.log(`   Organizer: ${organizer1.user.email} / ${DEFAULT_PASSWORD}`);
   console.log(`   Student: ${students[0].email} / ${DEFAULT_PASSWORD}`);
   console.log("\n[seed] 🎪 Events Status:");

@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
-  Bell,
   LogOut,
   Settings,
   User,
@@ -33,10 +32,12 @@ import {
   BarChart,
   Home,
   Shield,
+  Bell,
 } from "lucide-react";
 import { getInitials } from "@/utils/helpers";
 import { toast } from "sonner";
 import { ThemeToggle } from "./ThemeToggle";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 
@@ -229,13 +230,7 @@ export default function Header() {
         <div className="flex items-center gap-2 sm:gap-4">
           <ThemeToggle />
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0"
-          >
-            <Bell className="h-5 w-5" />
-          </Button>
+          <NotificationBell />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

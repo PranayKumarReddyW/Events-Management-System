@@ -4,6 +4,7 @@ const Notification = require("../models/Notification");
 const { asyncHandler } = require("../middleware/errorHandler");
 const AppError = require("../middleware/errorHandler").AppError;
 const logger = require("../utils/logger");
+const { getRedisClient } = require("../config/redis");
 
 /**
  * @desc    Add round to event
@@ -14,10 +15,18 @@ exports.addRound = asyncHandler(async (req, res) => {
   const { eventId } = req.params;
   const { name, description, startDate, endDate, maxParticipants } = req.body;
 
+  logger.info(`[ADD ROUND] Request to add round to event ${eventId}`);
+  logger.info(`[ADD ROUND] Request body:`, req.body);
+  logger.info(`[ADD ROUND] User:`, req.user._id, req.user.role);
+
   const event = await Event.findById(eventId);
   if (!event) {
+    logger.error(`[ADD ROUND] Event not found: ${eventId}`);
     throw new AppError("Event not found", 404);
   }
+
+  logger.info(`[ADD ROUND] Found event: ${event.title}`);
+  logger.info(`[ADD ROUND] Current rounds count: ${event.rounds.length}`);
 
   // Check if user is organizer
   if (
@@ -25,23 +34,46 @@ exports.addRound = asyncHandler(async (req, res) => {
     req.user.role !== "admin" &&
     req.user.role !== "super_admin"
   ) {
+    logger.error(
+      `[ADD ROUND] Unauthorized user ${req.user._id} trying to modify event ${eventId}`
+    );
     throw new AppError("Not authorized to modify this event", 403);
   }
 
-  event.rounds.push({
+  const newRound = {
     name,
     description,
     startDate,
     endDate,
     maxParticipants,
     status: "upcoming",
-  });
+  };
 
-  await event.save();
+  logger.info(`[ADD ROUND] Adding new round:`, newRound);
+  event.rounds.push(newRound);
+  logger.info(`[ADD ROUND] Rounds count after push: ${event.rounds.length}`);
+
+  const savedEvent = await event.save();
+  logger.info(`[ADD ROUND] Event saved successfully`);
+  logger.info(
+    `[ADD ROUND] Saved event rounds count: ${savedEvent.rounds.length}`
+  );
+  logger.info(
+    `[ADD ROUND] Last round:`,
+    savedEvent.rounds[savedEvent.rounds.length - 1]
+  );
+
+  // Clear Redis cache for this event
+  const redis = getRedisClient();
+  if (redis) {
+    await redis.del(`event:${eventId}`);
+    logger.info(`[ADD ROUND] Redis cache cleared for event ${eventId}`);
+  }
 
   res.status(201).json({
     success: true,
-    data: { event },
+    data: { event: savedEvent },
+    message: "Round added successfully",
   });
 });
 
@@ -82,6 +114,13 @@ exports.updateRound = asyncHandler(async (req, res) => {
 
   await event.save();
 
+  // Clear Redis cache for this event
+  const redis = getRedisClient();
+  if (redis) {
+    await redis.del(`event:${eventId}`);
+    logger.info(`[UPDATE ROUND] Redis cache cleared for event ${eventId}`);
+  }
+
   res.json({
     success: true,
     data: { event },
@@ -112,6 +151,13 @@ exports.deleteRound = asyncHandler(async (req, res) => {
 
   event.rounds.pull(roundId);
   await event.save();
+
+  // Clear Redis cache for this event
+  const redis = getRedisClient();
+  if (redis) {
+    await redis.del(`event:${eventId}`);
+    logger.info(`[DELETE ROUND] Redis cache cleared for event ${eventId}`);
+  }
 
   res.json({
     success: true,

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { eventsApi } from "@/api/events";
 import { registrationsApi } from "@/api/registrations";
+import { certificatesApi } from "@/api/certificates";
 import {
   Card,
   CardContent,
@@ -36,9 +37,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
 import {
-  ArrowLeft,
   Trophy,
   Medal,
   Award,
@@ -46,6 +47,9 @@ import {
   Edit,
   Trash2,
   CheckCircle,
+  FileCheck,
+  Loader2,
+  Info,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -67,6 +71,12 @@ export default function ResultsManagementPage() {
   const [results, setResults] = useState<Result[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showCertificateDialog, setShowCertificateDialog] = useState(false);
+  const [generatingCertificates, setGeneratingCertificates] = useState(false);
+  const [certificateType, setCertificateType] = useState<
+    "participation" | "winner"
+  >("winner");
+  const [certificatesGenerated, setCertificatesGenerated] = useState(false);
   const [editingResult, setEditingResult] = useState<Result | null>(null);
   const [formData, setFormData] = useState<Partial<Result>>({
     position: 1,
@@ -84,15 +94,54 @@ export default function ResultsManagementPage() {
   const fetchEventData = async () => {
     try {
       setLoading(true);
+      console.log("🎯 Fetching data for Event ID:", eventId);
+
       const [eventRes, regsRes] = await Promise.all([
         eventsApi.getEvent(eventId!),
         registrationsApi.getEventRegistrations(eventId!, {
-          status: "confirmed",
           limit: 1000,
         }),
       ]);
+
+      console.log("📡 Full API Response:", regsRes);
+      console.log("📦 Response data structure:", regsRes.data);
+
       setEvent(eventRes.data?.event);
-      setRegistrations(regsRes.data || []);
+      const fetchedRegistrations = regsRes.data || [];
+
+      console.log("🔍 All registrations:", fetchedRegistrations);
+      console.log("📊 Total fetched:", fetchedRegistrations.length);
+
+      if (fetchedRegistrations.length > 0) {
+        console.log("📋 Sample registration:", fetchedRegistrations[0]);
+        console.log(
+          "🏷️ All status values:",
+          fetchedRegistrations.map((r: any) => r.status)
+        );
+        console.log(
+          "💰 All payment statuses:",
+          fetchedRegistrations.map((r: any) => r.paymentStatus)
+        );
+      } else {
+        console.warn("⚠️ No registrations returned from API");
+      }
+
+      // Accept all confirmed registrations
+      const validRegistrations = fetchedRegistrations.filter(
+        (reg: any) => reg.status === "confirmed"
+      );
+
+      console.log("✅ Valid registrations:", validRegistrations);
+      console.log(
+        "📝 Number of valid registrations:",
+        validRegistrations.length
+      );
+      setRegistrations(validRegistrations);
+
+      // Check if certificates are already generated
+      if (eventRes.data?.event?.certificatesGenerated) {
+        setCertificatesGenerated(true);
+      }
 
       // Fetch existing results
       try {
@@ -143,9 +192,11 @@ export default function ResultsManagementPage() {
       return;
     }
 
-    // NULL CHECK: Find registration
+    // NULL CHECK: Find registration by user ID
     const registration = registrations.find(
-      (r) => r?._id === formData.participantId
+      (r) =>
+        r?.user?._id === formData.participantId ||
+        r?._id === formData.participantId
     );
     if (!registration) {
       toast.error("Participant not found");
@@ -157,7 +208,7 @@ export default function ResultsManagementPage() {
       ...formData,
       participantName:
         registration.user?.fullName || registration.team?.name || "Unknown",
-      participantId: registration.user?._id || "",
+      participantId: registration.user?._id || formData.participantId,
       teamId: registration.team?._id,
       position: formData.position || 1,
     } as Result;
@@ -252,6 +303,55 @@ export default function ResultsManagementPage() {
     }
   };
 
+  const handleGenerateCertificates = async () => {
+    if (!eventId) {
+      toast.error("Event ID is missing");
+      return;
+    }
+
+    if (
+      event?.status !== "completed" &&
+      new Date(event?.endDateTime) > new Date()
+    ) {
+      toast.error("Certificates can only be generated after event completion");
+      return;
+    }
+
+    setGeneratingCertificates(true);
+    try {
+      const registrationIds =
+        certificateType === "winner"
+          ? results.map((r) => r.participantId).filter(Boolean)
+          : registrations.filter((r) => r.checkInTime).map((r) => r._id);
+
+      if (registrationIds.length === 0) {
+        toast.error("No eligible participants found");
+        setGeneratingCertificates(false);
+        return;
+      }
+
+      const response: any = await certificatesApi.generateCertificates({
+        eventId,
+        certificateType,
+        registrationIds,
+      });
+
+      toast.success("Certificates generated successfully", {
+        description: `${response.data?.generated || 0} certificates created`,
+      });
+
+      setCertificatesGenerated(true);
+      setShowCertificateDialog(false);
+      fetchEventData();
+    } catch (error: any) {
+      toast.error("Failed to generate certificates", {
+        description: error.response?.data?.message || "Please try again",
+      });
+    } finally {
+      setGeneratingCertificates(false);
+    }
+  };
+
   const getPositionIcon = (position: number) => {
     switch (position) {
       case 1:
@@ -286,37 +386,54 @@ export default function ResultsManagementPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate(`/events/${eventId}`)}
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Event
-        </Button>
-      </div>
-
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Results Management
-          </h1>
-          <p className="text-muted-foreground mt-1">{event?.name}</p>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight">
+              Results Management
+            </h1>
+            {event?.status === "completed" && (
+              <Badge variant="secondary">Event Completed</Badge>
+            )}
+          </div>
+          <p className="text-muted-foreground mt-1">
+            {event?.title || event?.name}
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={handleAddResult}>
+          <Button
+            onClick={handleAddResult}
+            disabled={event?.status === "completed"}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Add Result
           </Button>
           {results.length > 0 && (
             <>
-              <Button onClick={handleSaveAllResults} variant="outline">
+              <Button
+                onClick={handleSaveAllResults}
+                variant="outline"
+                disabled={event?.status === "completed"}
+              >
                 Save All Results
               </Button>
-              <Button onClick={handlePublishResults} variant="default">
+              <Button
+                onClick={handlePublishResults}
+                variant="default"
+                disabled={event?.status === "completed"}
+              >
                 <CheckCircle className="mr-2 h-4 w-4" />
                 Publish Results
+              </Button>
+              <Button
+                onClick={() => setShowCertificateDialog(true)}
+                variant="secondary"
+                disabled={certificatesGenerated}
+              >
+                <FileCheck className="mr-2 h-4 w-4" />
+                {certificatesGenerated
+                  ? "Certificates Generated"
+                  : "Generate Certificates"}
               </Button>
             </>
           )}
@@ -428,11 +545,21 @@ export default function ResultsManagementPage() {
                   <SelectValue placeholder="Select participant" />
                 </SelectTrigger>
                 <SelectContent>
-                  {registrations.map((reg) => (
-                    <SelectItem key={reg._id} value={reg._id}>
-                      {reg.user?.fullName} - {reg.user?.email}
-                    </SelectItem>
-                  ))}
+                  {registrations.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground text-center">
+                      No confirmed participants found
+                    </div>
+                  ) : (
+                    registrations.map((reg) => (
+                      <SelectItem
+                        key={reg._id}
+                        value={reg.user?._id || reg._id}
+                      >
+                        {reg.user?.fullName || "Unknown"} -{" "}
+                        {reg.user?.email || "No email"}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -483,6 +610,79 @@ export default function ResultsManagementPage() {
             </Button>
             <Button onClick={handleSaveResult}>
               {editingResult ? "Update" : "Add"} Result
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Certificate Generation Dialog */}
+      <Dialog
+        open={showCertificateDialog}
+        onOpenChange={setShowCertificateDialog}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate Certificates</DialogTitle>
+            <DialogDescription>
+              Choose the type of certificates to generate for participants
+            </DialogDescription>
+          </DialogHeader>
+
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle>Certificate Generation</AlertTitle>
+            <AlertDescription>
+              {certificateType === "winner"
+                ? `Certificates will be generated for ${results.length} winners`
+                : `Certificates will be generated for all checked-in participants (${
+                    registrations.filter((r) => r.checkInTime).length
+                  })`}
+            </AlertDescription>
+          </Alert>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="certificateType">Certificate Type</Label>
+              <Select
+                value={certificateType}
+                onValueChange={(value: "participation" | "winner") =>
+                  setCertificateType(value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select certificate type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="winner">Winner Certificates</SelectItem>
+                  <SelectItem value="participation">
+                    Participation Certificates
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {certificateType === "winner"
+                  ? "Generate certificates only for winners/top performers"
+                  : "Generate certificates for all participants who attended"}
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowCertificateDialog(false)}
+              disabled={generatingCertificates}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleGenerateCertificates}
+              disabled={generatingCertificates}
+            >
+              {generatingCertificates && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Generate Certificates
             </Button>
           </DialogFooter>
         </DialogContent>

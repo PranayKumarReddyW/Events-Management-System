@@ -15,16 +15,18 @@ const {
 const { protect, authorize } = require("../middleware/auth");
 const { auditLog } = require("../middleware/audit");
 
-// Public routes
-router.get("/:id", getCertificateById);
-router.get("/:id/download", downloadCertificate);
+// Public routes (specific paths before :id)
 router.get("/verify/:certificateNumber", verifyCertificate);
 
 // Protected routes
 router.use(protect);
 
-// Get my certificates
+// Get my certificates (must come before /:id)
 router.get("/my", getMyCertificates);
+
+// Public certificate routes with ID
+router.get("/:id", getCertificateById);
+router.get("/:id/download", downloadCertificate);
 
 // Department organizer+ routes
 router.post(

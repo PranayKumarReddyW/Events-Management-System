@@ -40,9 +40,11 @@ import {
   ACADEMIC_YEARS,
   DEPARTMENTS,
 } from "@/constants";
-import { ArrowLeft, Loader2, X } from "lucide-react";
+import { Loader2, X, Info, Clock, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 const eventSchema = z
   .object({
@@ -145,7 +147,7 @@ export default function CreateEventPage() {
       rules: "",
       agenda: "",
       schedule: [],
-      eventType: "workshop",
+      eventType: "",
       eventMode: "offline",
       venue: "",
       meetingLink: "",
@@ -166,6 +168,11 @@ export default function CreateEventPage() {
       status: "draft",
     },
   });
+
+  // Check if event has started (for locking)
+  const eventHasStarted =
+    event && new Date(event.startDateTime || event.startDate) <= new Date();
+  const isEventLocked = isEditMode && eventHasStarted;
 
   const isPaid = form.watch("isPaid");
   const eventMode = form.watch("eventMode");
@@ -220,14 +227,28 @@ export default function CreateEventPage() {
 
   useEffect(() => {
     if (event && isEditMode) {
+      // Normalize event type - ensure it matches EVENT_TYPES values
+      const normalizedEventType = event.eventType || "workshop";
+
+      // Ensure status is one of the allowed values
+      const validStatus = [
+        "draft",
+        "published",
+        "ongoing",
+        "completed",
+        "cancelled",
+      ].includes(event.status)
+        ? event.status
+        : "draft";
+
       form.reset({
-        title: event.title,
-        description: event.description,
+        title: event.title || "",
+        description: event.description || "",
         rules: event.rules || "",
         agenda: event.agenda || "",
         schedule: event.schedule || [],
-        eventType: event.eventType || "workshop",
-        eventMode: event.eventMode,
+        eventType: normalizedEventType,
+        eventMode: event.eventMode || "offline",
         venue: event.venue || "",
         meetingLink: event.meetingLink || "",
         startDate: new Date(event.startDateTime || event.startDate)
@@ -245,23 +266,42 @@ export default function CreateEventPage() {
         minTeamSize: Number(event.minTeamSize) || 1,
         maxTeamSize: Number(event.maxTeamSize) || 1,
         isPaid: Boolean(event.isPaid),
-        registrationFee: event.amount || event.registrationFee || 0,
+        registrationFee: Number(event.amount || event.registrationFee || 0),
         requiresApproval: Boolean(event.requiresApproval),
         eligibility: event.eligibility || "",
-        eligibleYears: event.eligibleYears || [],
-        eligibleDepartments: event.eligibleDepartments || [],
+        eligibleYears: Array.isArray(event.eligibleYears)
+          ? event.eligibleYears
+          : [],
+        eligibleDepartments: Array.isArray(event.eligibleDepartments)
+          ? event.eligibleDepartments
+          : [],
         allowExternalStudents: Boolean(event.allowExternalStudents),
-        visibility: event.visibility,
+        visibility: event.visibility || "public",
+        status: validStatus,
       });
+
       // Set image preview if event has an image
       if (event.bannerImage) {
         setImagePreview(event.bannerImage);
+      }
+
+      // Set additional images if they exist
+      if (event.images && Array.isArray(event.images)) {
+        setAdditionalImages(event.images);
       }
     }
   }, [event, isEditMode, form]);
 
   const onSubmit = async (data: EventFormValues) => {
     try {
+      // Prevent editing if event has started
+      if (isEventLocked) {
+        toast.error(
+          "Cannot modify event details after event has started. Only participant management is allowed."
+        );
+        return;
+      }
+
       // Validate required fields
       if (!data.eventType || data.eventType.trim() === "") {
         toast.error("Event type is required");
@@ -401,25 +441,63 @@ export default function CreateEventPage() {
   return (
     <div className="space-y-4 sm:space-y-6 px-4 sm:px-0">
       <div className="flex items-center gap-3 sm:gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate("/events")}
-          className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0"
-        >
-          <ArrowLeft className="h-5 w-5 sm:h-4 sm:w-4" />
-        </Button>
-        <div>
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">
-            {isEditMode ? "Edit Event" : "Create New Event"}
-          </h1>
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">
+              {isEditMode ? "Edit Event" : "Create New Event"}
+            </h1>
+            {isEventLocked && (
+              <Badge variant="destructive" className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                Event Started - Locked
+              </Badge>
+            )}
+          </div>
           <p className="text-sm sm:text-base text-muted-foreground">
-            {isEditMode
+            {isEventLocked
+              ? "Event has started. Only participant management is allowed."
+              : isEditMode
               ? "Update your event details"
               : "Fill in the details to create a new event"}
           </p>
         </div>
       </div>
+
+      {isEditMode && (
+        <>
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              To manage rounds for this event, save any changes and click the{" "}
+              <strong>"Rounds"</strong> button on the Event Detail page. You can
+              create multiple rounds, advance participants, and track progress
+              through each stage.
+            </AlertDescription>
+          </Alert>
+
+          {isEventLocked && (
+            <Alert variant="destructive">
+              <Lock className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Event has started - Critical fields are locked</strong>
+                <p className="mt-2 text-sm">
+                  The following fields cannot be modified after event start:
+                </p>
+                <ul className="mt-1 text-sm list-disc list-inside space-y-1">
+                  <li>Title, Event Type, Start/End Dates</li>
+                  <li>Team Size (Min/Max), Payment Settings</li>
+                  <li>Eligibility Criteria, Years, Departments</li>
+                  <li>External Students, Approval Requirements</li>
+                </ul>
+                <p className="mt-2 text-sm font-medium">
+                  You can still update: Description, Rules, Agenda, Venue,
+                  Meeting Link, Images, Registration Status
+                </p>
+              </AlertDescription>
+            </Alert>
+          )}
+        </>
+      )}
 
       <Form {...form}>
         <form
@@ -443,7 +521,11 @@ export default function CreateEventPage() {
                   <FormItem>
                     <FormLabel>Event Title</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter event title" {...field} />
+                      <Input
+                        placeholder="Enter event title"
+                        {...field}
+                        disabled={isEventLocked}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -592,6 +674,7 @@ export default function CreateEventPage() {
                       <Select
                         onValueChange={field.onChange}
                         value={field.value}
+                        disabled={isEventLocked}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -620,6 +703,7 @@ export default function CreateEventPage() {
                       <Select
                         onValueChange={field.onChange}
                         value={field.value}
+                        disabled={isEventLocked}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -659,7 +743,11 @@ export default function CreateEventPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Event Mode</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={isEventLocked}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select event mode" />
@@ -686,7 +774,11 @@ export default function CreateEventPage() {
                     <FormItem>
                       <FormLabel>Venue</FormLabel>
                       <FormControl>
-                        <Input placeholder="Enter venue location" {...field} />
+                        <Input
+                          placeholder="Enter venue location"
+                          {...field}
+                          disabled={isEventLocked}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -706,6 +798,7 @@ export default function CreateEventPage() {
                           type="url"
                           placeholder="https://meet.example.com/event"
                           {...field}
+                          disabled={isEventLocked}
                         />
                       </FormControl>
                       <FormMessage />
@@ -722,7 +815,11 @@ export default function CreateEventPage() {
                     <FormItem>
                       <FormLabel>Start Date & Time</FormLabel>
                       <FormControl>
-                        <Input type="datetime-local" {...field} />
+                        <Input
+                          type="datetime-local"
+                          {...field}
+                          disabled={isEventLocked}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -736,7 +833,11 @@ export default function CreateEventPage() {
                     <FormItem>
                       <FormLabel>End Date & Time</FormLabel>
                       <FormControl>
-                        <Input type="datetime-local" {...field} />
+                        <Input
+                          type="datetime-local"
+                          {...field}
+                          disabled={isEventLocked}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -750,7 +851,11 @@ export default function CreateEventPage() {
                     <FormItem>
                       <FormLabel>Registration Deadline</FormLabel>
                       <FormControl>
-                        <Input type="datetime-local" {...field} />
+                        <Input
+                          type="datetime-local"
+                          {...field}
+                          disabled={isEventLocked}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -838,7 +943,9 @@ export default function CreateEventPage() {
                           onChange={(e) =>
                             field.onChange(Number(e.target.value))
                           }
-                          disabled={form.watch("maxTeamSize") === 1}
+                          disabled={
+                            form.watch("maxTeamSize") === 1 || isEventLocked
+                          }
                         />
                       </FormControl>
                       <FormMessage />
@@ -859,7 +966,9 @@ export default function CreateEventPage() {
                           onChange={(e) =>
                             field.onChange(Number(e.target.value))
                           }
-                          disabled={form.watch("maxTeamSize") === 1}
+                          disabled={
+                            form.watch("maxTeamSize") === 1 || isEventLocked
+                          }
                         />
                       </FormControl>
                       <FormMessage />
@@ -891,6 +1000,7 @@ export default function CreateEventPage() {
                             form.setValue("minTeamSize", 2);
                           }
                         }}
+                        disabled={isEventLocked}
                       />
                     </FormControl>
                   </FormItem>
@@ -908,6 +1018,7 @@ export default function CreateEventPage() {
                         placeholder="Describe who can register for this event (e.g., Open to all engineering students)"
                         {...field}
                         className="min-h-24"
+                        disabled={isEventLocked}
                       />
                     </FormControl>
                     <FormDescription>
@@ -1106,20 +1217,26 @@ export default function CreateEventPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => navigate("/events")}
+              onClick={() => navigate(isEditMode ? `/events/${id}` : "/events")}
               className="w-full sm:w-auto min-h-[44px]"
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={createEvent.isPending || updateEvent.isPending}
+              disabled={
+                createEvent.isPending || updateEvent.isPending || isEventLocked
+              }
               className="w-full sm:w-auto min-h-[44px]"
             >
               {(createEvent.isPending || updateEvent.isPending) && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              {isEditMode ? "Update Event" : "Create Event"}
+              {isEditMode
+                ? isEventLocked
+                  ? "Event Started - Locked"
+                  : "Update Event"
+                : "Create Event"}
             </Button>
           </div>
         </form>

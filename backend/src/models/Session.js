@@ -52,9 +52,7 @@ const sessionSchema = new mongoose.Schema(
 
 // Indexes
 sessionSchema.index({ userId: 1 });
-sessionSchema.index({ token: 1 });
 sessionSchema.index({ isActive: 1 });
-sessionSchema.index({ expiresAt: 1 });
 
 // Update last activity
 sessionSchema.methods.updateActivity = function () {

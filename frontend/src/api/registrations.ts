@@ -31,7 +31,7 @@ export interface CancelRegistrationData {
   reason?: string;
 }
 
-// Backend returns data directly in response, not nested
+// Backend API response for event registrations
 export interface RegistrationsApiResponse {
   success: boolean;
   data: EventRegistration[];
@@ -74,11 +74,11 @@ export const registrationsApi = {
   getEventRegistrations: async (
     eventId: string,
     filters?: RegistrationFilters
-  ): Promise<RegistrationsApiResponse> => {
+  ) => {
     return apiClient.get<RegistrationsApiResponse>(
       `/registrations/event/${eventId}`,
       filters
-    ) as Promise<RegistrationsApiResponse>;
+    );
   },
 
   // Update registration status (organizer+)

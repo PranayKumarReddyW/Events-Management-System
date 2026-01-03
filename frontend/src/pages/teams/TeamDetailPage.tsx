@@ -7,6 +7,7 @@ import {
   useLockTeam,
   useUnlockTeam,
 } from "@/hooks/useTeams";
+import type { Team } from "@/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
-  ArrowLeft,
   Crown,
   Users,
   Calendar,
@@ -62,7 +62,7 @@ export default function TeamDetailPage() {
   const [memberEmail, setMemberEmail] = useState("");
   const [copied, setCopied] = useState(false);
 
-  const team = teamResponse?.data;
+  const team: Team | undefined = teamResponse?.data;
   // Handle both populated and non-populated leader field
   const leaderId =
     typeof team?.leader === "string" ? team.leader : (team as any)?.leader?._id;
@@ -223,13 +223,6 @@ export default function TeamDetailPage() {
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <p className="text-destructive font-medium">Team not found</p>
-          <Button
-            variant="outline"
-            onClick={() => navigate("/teams")}
-            className="mt-4"
-          >
-            Back to Teams
-          </Button>
         </div>
       </div>
     );
@@ -238,10 +231,9 @@ export default function TeamDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Button variant="ghost" onClick={() => navigate("/teams")}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Teams
-        </Button>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Team Details</h1>
+        </div>
         {isLeader && (
           <div className="flex gap-2">
             {team.status === "locked" ? (
@@ -280,10 +272,7 @@ export default function TeamDetailPage() {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    variant="destructive"
-                    onClick={handleDeleteTeam}
-                  >
+                  <AlertDialogAction onClick={handleDeleteTeam}>
                     Delete
                   </AlertDialogAction>
                 </AlertDialogFooter>

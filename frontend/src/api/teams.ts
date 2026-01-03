@@ -24,7 +24,7 @@ export interface JoinTeamData {
 }
 
 export interface AddMemberData {
-  userId: string;
+  email: string;
 }
 
 export interface TransferLeadershipData {

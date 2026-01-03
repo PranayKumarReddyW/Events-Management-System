@@ -85,7 +85,6 @@ const rolePermissionSchema = new mongoose.Schema(
 );
 
 // Indexes
-rolePermissionSchema.index({ role: 1 });
 rolePermissionSchema.index({ isActive: 1 });
 
 module.exports = mongoose.model("RolePermission", rolePermissionSchema);

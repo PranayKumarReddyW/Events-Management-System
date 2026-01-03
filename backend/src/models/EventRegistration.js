@@ -127,12 +127,24 @@ const eventRegistrationSchema = new mongoose.Schema(
   }
 );
 
-eventRegistrationSchema.index({ event: 1, user: 1 }, { unique: true });
+// Compound index for faster queries
 eventRegistrationSchema.index({ event: 1, status: 1 });
 eventRegistrationSchema.index({ user: 1, registrationDate: -1 });
 eventRegistrationSchema.index({ team: 1, status: 1 });
-eventRegistrationSchema.index({ paymentStatus: 1 });
-eventRegistrationSchema.index({ checkInTime: 1 });
+
+// CRITICAL: Partial unique index - prevents duplicate ACTIVE registrations
+// Allows users to register again if they previously cancelled/rejected
+// This is the database-level enforcement of "one active registration per user per event"
+eventRegistrationSchema.index(
+  { event: 1, user: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: { $in: ["pending", "confirmed", "waitlisted"] },
+    },
+    name: "unique_active_registration",
+  }
+);
 
 eventRegistrationSchema.pre("save", async function (next) {
   if (this.isNew && !this.registrationNumber) {

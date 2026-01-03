@@ -7,7 +7,7 @@ const {
   registerLimiter,
   passwordResetLimiter,
 } = require("../middleware/rateLimiter");
-const { authenticate } = require("../middleware/auth");
+const { protect, authorize } = require("../middleware/auth");
 const { auditLog } = require("../middleware/audit");
 
 // Public routes
@@ -36,7 +36,7 @@ router.post(
 router.post("/reset-password/:token", authController.resetPassword);
 
 // Protected routes
-router.use(authenticate);
+router.use(protect);
 
 router.get("/me", authController.getCurrentUser);
 
@@ -46,6 +46,15 @@ router.put(
   "/profile",
   auditLog("update", "user"),
   authController.updateProfile
+);
+
+// Admin only - Create Faculty/Department Organizer
+router.post(
+  "/create-user",
+  authorize("admin", "super_admin"),
+  validateSchema(schemas.userRegister),
+  auditLog("create", "user"),
+  authController.createUser
 );
 
 router.post("/change-password", authController.changePassword);

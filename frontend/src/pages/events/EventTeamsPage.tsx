@@ -33,7 +33,6 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  ArrowLeft,
   Users,
   Trophy,
   TrendingUp,
@@ -117,7 +116,9 @@ export default function EventTeamsPage() {
 
       // Load event
       const eventRes = await eventsApi.getEvent(id);
-      setEvent(eventRes.data.event);
+      if (eventRes.data?.event) {
+        setEvent(eventRes.data.event);
+      }
 
       // Load teams with details
       const filters: any = { sortBy, order: "asc" };
@@ -135,7 +136,9 @@ export default function EventTeamsPage() {
       }
 
       const teamsRes = await teamsApi.getEventTeamsWithDetails(id, filters);
-      setTeamsData(teamsRes.data.data);
+      if (teamsRes.data) {
+        setTeamsData(teamsRes.data as any);
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Failed to load teams");
     } finally {
@@ -260,11 +263,6 @@ export default function EventTeamsPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <Link to={`/events/${id}`}>
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            </Link>
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Event Teams</h1>
               <p className="text-muted-foreground">{event?.title}</p>

@@ -7,12 +7,9 @@ export * from "./useNotifications";
 export * from "./useFeedback";
 export * from "./useTheme";
 export * from "./usePayments";
+export * from "./useCertificates";
 
 // Placeholder exports for missing hooks
-export const useCertificates = () => ({
-  data: { data: { certificates: [] } },
-  isLoading: false,
-});
 export const useAnalytics = () => ({
   data: {
     data: {

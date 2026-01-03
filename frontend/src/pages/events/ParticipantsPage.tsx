@@ -49,7 +49,6 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import {
-  ArrowLeft,
   Search,
   Download,
   CheckCircle2,
@@ -268,10 +267,6 @@ export default function ParticipantsPage() {
     <div className="container mx-auto py-8 px-4 space-y-6">
       {/* Header */}
       <div className="mb-6">
-        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold mb-2">Event Participants</h1>

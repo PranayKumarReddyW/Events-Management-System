@@ -57,7 +57,6 @@ const eventApprovalSchema = new mongoose.Schema(
 );
 
 // Indexes
-eventApprovalSchema.index({ eventId: 1 });
 eventApprovalSchema.index({ submittedBy: 1 });
 eventApprovalSchema.index({ approvedBy: 1 });
 eventApprovalSchema.index({ status: 1 });

@@ -87,6 +87,7 @@ import {
   ArrowUpDown,
   Mail,
   Phone,
+  Trophy,
 } from "lucide-react";
 import {
   formatDate,
@@ -621,13 +622,6 @@ export default function EventDetailPage() {
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <p className="text-destructive font-medium">Event not found</p>
-          <Button
-            variant="outline"
-            onClick={() => navigate("/events")}
-            className="mt-4"
-          >
-            Back to Events
-          </Button>
         </div>
       </div>
     );
@@ -676,10 +670,6 @@ export default function EventDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Button variant="ghost" onClick={() => navigate("/events")}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Events
-        </Button>
         {canManageEvent && (
           <div className="flex gap-2">
             <div className="flex items-center gap-2 px-3 py-2 border rounded-md">
@@ -731,6 +721,12 @@ export default function EventDetailPage() {
               </Link>
             </Button>
             <Button variant="outline" asChild>
+              <Link to={`/events/${id}/rounds`}>
+                <Trophy className="mr-2 h-4 w-4" />
+                Rounds
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
               <Link to={`/events/${id}/results`}>
                 <Award className="mr-2 h-4 w-4" />
                 Results
@@ -765,6 +761,95 @@ export default function EventDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Registration Status Indicators for Students */}
+      {isStudent && (
+        <>
+          {/* Already Registered - Success State */}
+          {hasAlreadyRegistered && (
+            <div className="p-4 rounded-lg border-2 border-green-500/30 bg-green-50 dark:bg-green-950/20">
+              <div className="flex items-start gap-3">
+                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-green-900 dark:text-green-100">
+                    Registration Confirmed
+                  </p>
+                  <p className="text-sm text-green-800 dark:text-green-200 mt-1">
+                    You are already registered for this event.
+                    {myActiveRegistration?.paymentStatus === "pending" &&
+                      " Payment is pending."}
+                    {myActiveRegistration?.paymentStatus === "paid" &&
+                      " Payment completed."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Registrations Closed */}
+          {!hasAlreadyRegistered &&
+            registrationsClosed &&
+            event.status === "published" && (
+              <div className="p-4 rounded-lg border-2 border-orange-500/30 bg-orange-50 dark:bg-orange-950/20">
+                <div className="flex items-start gap-3">
+                  <Lock className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-orange-900 dark:text-orange-100">
+                      Registrations Closed
+                    </p>
+                    <p className="text-sm text-orange-800 dark:text-orange-200 mt-1">
+                      {!event.registrationsOpen
+                        ? "The organizer has closed registrations for this event."
+                        : "The registration deadline has passed."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {/* Event Full */}
+          {!hasAlreadyRegistered &&
+            !registrationsClosed &&
+            actualRegistrationCount >= (event.maxParticipants || Infinity) && (
+              <div className="p-4 rounded-lg border-2 border-red-500/30 bg-red-50 dark:bg-red-950/20">
+                <div className="flex items-start gap-3">
+                  <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-red-900 dark:text-red-100">
+                      Event Full
+                    </p>
+                    <p className="text-sm text-red-800 dark:text-red-200 mt-1">
+                      This event has reached maximum capacity (
+                      {event.maxParticipants} participants).
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {/* Event Already Started/Completed */}
+          {!hasAlreadyRegistered &&
+            !registrationsClosed &&
+            ["ongoing", "completed"].includes(event.status) && (
+              <div className="p-4 rounded-lg border-2 border-gray-500/30 bg-gray-50 dark:bg-gray-950/20">
+                <div className="flex items-start gap-3">
+                  <Lock className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-gray-100">
+                      Event{" "}
+                      {event.status === "ongoing" ? "In Progress" : "Completed"}
+                    </p>
+                    <p className="text-sm text-gray-800 dark:text-gray-200 mt-1">
+                      Registrations are not available for{" "}
+                      {event.status === "ongoing" ? "ongoing" : "completed"}{" "}
+                      events.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+        </>
+      )}
 
       {isStudent && registrationsClosed && event.status === "published" && (
         <div className="p-4 rounded-lg border-2 border-orange-500/30 bg-orange-50 dark:bg-orange-950/20">

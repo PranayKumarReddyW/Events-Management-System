@@ -42,7 +42,7 @@ export function useCreateRegistration() {
   return useMutation({
     mutationFn: (data: CreateRegistrationData) =>
       registrationsApi.createRegistration(data),
-    onSuccess: (response, variables) => {
+    onSuccess: (_response, variables) => {
       queryClient.invalidateQueries({
         queryKey: [QUERY_KEYS.MY_REGISTRATIONS],
       });

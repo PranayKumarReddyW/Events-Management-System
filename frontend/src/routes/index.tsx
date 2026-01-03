@@ -27,11 +27,13 @@ import UsersPage from "@/pages/admin/UsersPage";
 import EventsManagementPage from "@/pages/admin/EventsManagementPage";
 import EventApprovalsPage from "@/pages/admin/EventApprovalsPage";
 import ParticipantsPage from "@/pages/events/ParticipantsPage";
+import RoundManagementPage from "@/pages/events/RoundManagementPage";
 import OrganizerEventsPage from "@/pages/organizer/OrganizerEventsPage";
 import ResultsManagementPage from "@/pages/organizer/ResultsManagementPage";
 import EventAnalyticsPage from "@/pages/events/EventAnalyticsPage";
 import NotFoundPage from "@/pages/NotFoundPage";
 import UnauthorizedPage from "@/pages/UnauthorizedPage";
+import DebugRoundsPage from "@/pages/debug/DebugRoundsPage";
 
 // Protected route wrapper
 function ProtectedRoute({
@@ -75,6 +77,9 @@ export default function AppRoutes() {
       <Route path="/auth/register" element={<RegisterPage />} />
       <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
+      {/* Debug route - Remove in production */}
+      <Route path="/debug/rounds" element={<DebugRoundsPage />} />
+
       {/* Protected routes */}
       <Route
         path="/*"
@@ -112,6 +117,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute requiredRole={["department_organizer", "faculty"]}>
               <ParticipantsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="events/:eventId/rounds"
+          element={
+            <ProtectedRoute requiredRole={["department_organizer", "faculty"]}>
+              <RoundManagementPage />
             </ProtectedRoute>
           }
         />

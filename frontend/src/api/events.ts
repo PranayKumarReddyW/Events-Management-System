@@ -205,7 +205,14 @@ export const eventsApi = {
 
   // Round management
   addRound: async (eventId: string, roundData: any) => {
-    return apiClient.post(`/events/${eventId}/rounds`, roundData);
+    console.log("[API] Adding round to event:", eventId);
+    console.log("[API] Round data:", roundData);
+    const response = await apiClient.post(
+      `/events/${eventId}/rounds`,
+      roundData
+    );
+    console.log("[API] Add round response:", response);
+    return response;
   },
 
   updateRound: async (eventId: string, roundId: string, roundData: any) => {
