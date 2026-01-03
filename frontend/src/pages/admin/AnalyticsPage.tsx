@@ -15,21 +15,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useState } from "react";
-import {
-  Users,
-  Calendar,
-  DollarSign,
-  TrendingUp,
-  Award,
-  UserCheck,
-} from "lucide-react";
+import { Users, Calendar, DollarSign, TrendingUp } from "lucide-react";
 import { formatCurrency } from "@/utils/helpers";
 
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState("30");
   const { data: analyticsResponse, isLoading } = useAnalytics();
 
-  const analytics = analyticsResponse?.data;
+  const analytics = analyticsResponse?.data?.overview;
 
   const stats = [
     {
@@ -57,28 +50,12 @@ export default function AnalyticsPage() {
       bgColor: "bg-purple-100",
     },
     {
-      title: "Attendance Rate",
-      value: `${analytics?.attendanceRate || 0}%`,
-      change: "+5%",
-      icon: UserCheck,
-      color: "text-orange-600",
-      bgColor: "bg-orange-100",
-    },
-    {
-      title: "Active Users",
-      value: analytics?.activeUsers || 0,
+      title: "Total Users",
+      value: analytics?.totalUsers || 0,
       change: "+15%",
       icon: TrendingUp,
       color: "text-indigo-600",
       bgColor: "bg-indigo-100",
-    },
-    {
-      title: "Certificates Issued",
-      value: analytics?.certificatesIssued || 0,
-      change: "+20%",
-      icon: Award,
-      color: "text-pink-600",
-      bgColor: "bg-pink-100",
     },
   ];
 
@@ -105,8 +82,8 @@ export default function AnalyticsPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {Array.from({ length: 6 }).map((_, i) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i}>
               <CardHeader>
                 <Skeleton className="h-4 w-1/2" />
@@ -118,7 +95,7 @@ export default function AnalyticsPage() {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {stats.map((stat) => (
             <Card key={stat.title}>
               <CardHeader className="flex flex-row items-center justify-between pb-2">

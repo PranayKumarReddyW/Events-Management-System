@@ -40,9 +40,10 @@ router.post(
   eventController.createEvent
 );
 
-// Update event
+// Update event - organizers can update their own, admins can update any
 router.put(
   "/:id",
+  authorize("department_organizer", "faculty", "admin", "super_admin"),
   uploadSingle("bannerImage"),
   auditUpdate("event"),
   eventController.updateEvent

@@ -5,6 +5,7 @@ import type { BulkCheckinData } from "./attendance";
 export interface RegistrationFilters {
   status?: string;
   paymentStatus?: string;
+  eventMode?: string;
   page?: number;
   limit?: number;
   search?: string;

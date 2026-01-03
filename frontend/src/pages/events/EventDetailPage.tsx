@@ -861,24 +861,6 @@ export default function EventDetailPage() {
         </>
       )}
 
-      {isStudent && registrationsClosed && event.status === "published" && (
-        <div className="p-4 rounded-lg border-2 border-orange-500/30 bg-orange-50 dark:bg-orange-950/20">
-          <div className="flex items-start gap-3">
-            <Lock className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
-            <div>
-              <p className="font-semibold text-orange-900 dark:text-orange-100">
-                Registrations Closed
-              </p>
-              <p className="text-sm text-orange-800 dark:text-orange-200 mt-1">
-                {!event.registrationsOpen
-                  ? "The organizer has closed registrations for this event."
-                  : "The registration deadline has passed."}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {event.bannerImage && (
         <div className="relative h-48 sm:h-64 md:h-80 lg:h-96 w-full overflow-hidden rounded-lg bg-muted">
           <img
@@ -1376,7 +1358,7 @@ export default function EventDetailPage() {
                   </div>
                 )}
 
-                {!registrationsClosed && (
+                {!registrationsClosed && !hasAlreadyRegistered && (
                   <div className="flex gap-2">
                     <Dialog
                       open={createTeamDialogOpen}

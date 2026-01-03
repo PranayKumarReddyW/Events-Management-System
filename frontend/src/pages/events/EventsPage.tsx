@@ -33,9 +33,6 @@ export default function EventsPage() {
     page: 1,
     limit: 12,
     search: "",
-    status: "published",
-    sortBy: "startDate",
-    order: "desc",
   });
 
   // Memoize filters to prevent infinite re-renders
@@ -49,7 +46,7 @@ export default function EventsPage() {
       filters.sortBy,
       filters.order,
       filters.eventType,
-      filters.mode,
+      filters.eventMode,
       filters.registrationStatus,
       filters.teamType,
     ]
@@ -122,7 +119,7 @@ export default function EventsPage() {
         <Select
           value={filters.eventType}
           onValueChange={(value) =>
-            handleFilterChange("eventType", value || undefined)
+            handleFilterChange("eventType", value === "all" ? undefined : value)
           }
         >
           <SelectTrigger>
@@ -138,9 +135,9 @@ export default function EventsPage() {
           </SelectContent>
         </Select>
         <Select
-          value={filters.mode}
+          value={filters.eventMode}
           onValueChange={(value) =>
-            handleFilterChange("mode", value || undefined)
+            handleFilterChange("eventMode", value === "all" ? undefined : value)
           }
         >
           <SelectTrigger>
@@ -159,7 +156,10 @@ export default function EventsPage() {
         <Select
           value={filters.registrationStatus}
           onValueChange={(value) =>
-            handleFilterChange("registrationStatus", value || undefined)
+            handleFilterChange(
+              "registrationStatus",
+              value === "all" ? undefined : value
+            )
           }
         >
           <SelectTrigger className="w-full sm:w-52">
@@ -173,7 +173,13 @@ export default function EventsPage() {
         </Select>
         <Select
           value={filters.sortBy}
-          onValueChange={(value) => handleFilterChange("sortBy", value)}
+          onValueChange={(value) => {
+            handleFilterChange("sortBy", value || undefined);
+            // Set default order based on sort field
+            if (value && !filters.order) {
+              handleFilterChange("order", value === "title" ? "asc" : "desc");
+            }
+          }}
         >
           <SelectTrigger className="w-full sm:w-52">
             <SelectValue placeholder="Sort By" />
@@ -186,9 +192,23 @@ export default function EventsPage() {
           </SelectContent>
         </Select>
         <Select
+          value={filters.order}
+          onValueChange={(value) =>
+            handleFilterChange("order", value || undefined)
+          }
+        >
+          <SelectTrigger className="w-full sm:w-40">
+            <SelectValue placeholder="Order" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="asc">Ascending</SelectItem>
+            <SelectItem value="desc">Descending</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
           value={filters.teamType}
           onValueChange={(value) =>
-            handleFilterChange("teamType", value || undefined)
+            handleFilterChange("teamType", value === "all" ? undefined : value)
           }
         >
           <SelectTrigger className="w-full sm:w-52">

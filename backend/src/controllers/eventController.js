@@ -47,11 +47,28 @@ exports.createEvent = async (req, res, next) => {
     // Handle uploaded banner image - support both file upload and base64
     if (req.body.bannerImageBase64) {
       // Store base64 directly in MongoDB
+      // Validate base64 size (max ~5MB base64 = ~3.75MB actual file)
+      const maxBase64Size = 5 * 1024 * 1024; // 5MB in base64
+      if (req.body.bannerImageBase64.length > maxBase64Size) {
+        return next(
+          new AppError("Banner image is too large. Maximum size is 3.75MB", 400)
+        );
+      }
       eventData.bannerImage = req.body.bannerImageBase64;
     } else if (req.files && req.files.length > 0) {
       // Convert uploaded file to base64
       const fs = require("fs");
       const fileBuffer = fs.readFileSync(req.files[0].path);
+
+      // Validate file size (max 3.75MB)
+      const maxFileSize = 3.75 * 1024 * 1024;
+      if (fileBuffer.length > maxFileSize) {
+        fs.unlinkSync(req.files[0].path);
+        return next(
+          new AppError("Banner image is too large. Maximum size is 3.75MB", 400)
+        );
+      }
+
       const base64Image = `data:${
         req.files[0].mimetype
       };base64,${fileBuffer.toString("base64")}`;
@@ -62,6 +79,16 @@ exports.createEvent = async (req, res, next) => {
       // Convert uploaded file to base64
       const fs = require("fs");
       const fileBuffer = fs.readFileSync(req.file.path);
+
+      // Validate file size (max 3.75MB)
+      const maxFileSize = 3.75 * 1024 * 1024;
+      if (fileBuffer.length > maxFileSize) {
+        fs.unlinkSync(req.file.path);
+        return next(
+          new AppError("Banner image is too large. Maximum size is 3.75MB", 400)
+        );
+      }
+
       const base64Image = `data:${
         req.file.mimetype
       };base64,${fileBuffer.toString("base64")}`;
@@ -72,12 +99,60 @@ exports.createEvent = async (req, res, next) => {
 
     // Handle multiple images array
     if (req.body.images && Array.isArray(req.body.images)) {
-      eventData.images = req.body.images; // Assume these are already base64
+      // Validate each image size
+      const maxBase64Size = 5 * 1024 * 1024; // 5MB in base64
+      const validImages = req.body.images.filter((img) => {
+        if (typeof img === "string" && img.length <= maxBase64Size) {
+          return true;
+        }
+        return false;
+      });
+
+      if (validImages.length !== req.body.images.length) {
+        return next(
+          new AppError(
+            `Some images were too large and skipped. Maximum size is 3.75MB per image.`,
+            400
+          )
+        );
+      }
+
+      eventData.images = validImages;
     } else if (req.body.images && typeof req.body.images === "string") {
       try {
-        eventData.images = JSON.parse(req.body.images);
+        const parsed = JSON.parse(req.body.images);
+        // Validate size
+        const maxBase64Size = 5 * 1024 * 1024;
+        const validImages = Array.isArray(parsed)
+          ? parsed.filter(
+              (img) => typeof img === "string" && img.length <= maxBase64Size
+            )
+          : [];
+
+        if (
+          validImages.length === 0 &&
+          Array.isArray(parsed) &&
+          parsed.length > 0
+        ) {
+          return next(
+            new AppError(
+              "All images were too large. Maximum size is 3.75MB per image.",
+              400
+            )
+          );
+        }
+
+        eventData.images = validImages;
       } catch (e) {
-        eventData.images = [req.body.images]; // Single image
+        // Single image as string
+        const maxBase64Size = 5 * 1024 * 1024;
+        if (req.body.images.length <= maxBase64Size) {
+          eventData.images = [req.body.images];
+        } else {
+          return next(
+            new AppError("Image is too large. Maximum size is 3.75MB", 400)
+          );
+        }
       }
     }
 
@@ -120,77 +195,138 @@ exports.getAllEvents = async (req, res, next) => {
       status,
       visibility,
       eventMode,
+      mode, // Support both 'mode' and 'eventMode'
       isPaid,
       startDate,
       endDate,
       departmentId,
       clubId,
-      sortBy = "startDateTime",
-      order = "asc",
+      sortBy,
+      order,
+      teamType,
+      registrationStatus,
     } = req.query;
 
-    // Build query
-    const query = {};
+    // Build query with AND conditions array for complex queries
+    const query = { $and: [] };
+    const searchOr = [];
+    const visibilityOr = [];
+    const registrationOr = [];
 
     // Search
     if (search) {
-      query.$or = [
+      searchOr.push(
         { title: { $regex: search, $options: "i" } },
         { description: { $regex: search, $options: "i" } },
-        { tags: { $in: [new RegExp(search, "i")] } },
-      ];
+        { tags: { $in: [new RegExp(search, "i")] } }
+      );
     }
 
-    // Filters
-    if (category) query.category = category;
-    if (eventType) query.eventType = eventType;
-    if (status) query.status = status;
-    if (eventMode) query.eventMode = eventMode;
-    if (isPaid !== undefined) query.isPaid = isPaid === "true";
-    if (departmentId) query.departmentId = departmentId;
-    if (clubId) query.clubId = clubId;
+    // Basic filters that can be simple
+    if (category) query.$and.push({ category });
+    if (eventType && eventType !== "all") query.$and.push({ eventType });
+    if (status && status !== "all") query.$and.push({ status });
+
+    // Support both 'mode' and 'eventMode' parameters
+    const modeValue = mode || eventMode;
+    if (modeValue && modeValue !== "all") {
+      query.$and.push({ eventMode: modeValue });
+    }
+
+    if (isPaid !== undefined) query.$and.push({ isPaid: isPaid === "true" });
+    if (departmentId) query.$and.push({ departmentId });
+    if (clubId) query.$and.push({ clubId });
+
+    // Team type filter
+    if (teamType && teamType !== "all") {
+      if (teamType === "solo") {
+        query.$and.push({ maxTeamSize: { $lte: 1 } });
+      } else if (teamType === "team") {
+        query.$and.push({ maxTeamSize: { $gt: 1 } });
+      }
+    }
+
+    // Registration status filter (open/closed)
+    if (registrationStatus && registrationStatus !== "all") {
+      const now = new Date();
+      if (registrationStatus === "open") {
+        query.$and.push(
+          { registrationsOpen: true },
+          { registrationDeadline: { $gt: now } }
+        );
+      } else if (registrationStatus === "closed") {
+        registrationOr.push(
+          { registrationsOpen: false },
+          { registrationDeadline: { $lte: now } }
+        );
+      }
+    }
 
     // Visibility based on user role
     if (req.user) {
       if (!["admin", "super_admin"].includes(req.user.role)) {
-        query.$or = [
+        visibilityOr.push(
           { visibility: "public" },
           { organizerId: req.user._id },
           {
             departmentId: req.user.departmentId,
             visibility: "department_only",
-          },
-        ];
+          }
+        );
       }
     } else {
-      query.visibility = "public";
+      query.$and.push({ visibility: "public" });
     }
 
-    // Status filter
-    if (!status) {
-      query.status = { $in: ["published", "ongoing"] };
-    }
+    // Combine $or conditions
+    if (searchOr.length > 0) query.$and.push({ $or: searchOr });
+    if (visibilityOr.length > 0) query.$and.push({ $or: visibilityOr });
+    if (registrationOr.length > 0) query.$and.push({ $or: registrationOr });
 
     // Date range
     if (startDate || endDate) {
-      query.startDateTime = {};
-      if (startDate) query.startDateTime.$gte = new Date(startDate);
-      if (endDate) query.startDateTime.$lte = new Date(endDate);
+      const dateQuery = {};
+      if (startDate) dateQuery.$gte = new Date(startDate);
+      if (endDate) dateQuery.$lte = new Date(endDate);
+      query.$and.push({ startDateTime: dateQuery });
     }
+
+    // Clean up empty $and - if no conditions, use empty query
+    const finalQuery = query.$and.length > 0 ? query : {};
 
     // Pagination
     const skip = (page - 1) * limit;
-    const sortOrder = order === "desc" ? -1 : 1;
 
-    const events = await Event.find(query)
+    // Build sort object - map frontend field names to database field names
+    let sortObject = {};
+    if (sortBy) {
+      const sortOrder = order === "desc" ? -1 : 1;
+
+      // Map frontend sort field names to database field names
+      const sortFieldMap = {
+        startDate: "startDateTime",
+        endDate: "endDateTime",
+        registeredCount: "registeredCount",
+        createdAt: "createdAt",
+        title: "title",
+      };
+
+      const dbSortField = sortFieldMap[sortBy] || sortBy;
+      sortObject[dbSortField] = sortOrder;
+    } else {
+      // Default to showing published/ongoing events first, then by creation date
+      sortObject = { status: -1, createdAt: -1 };
+    }
+
+    const events = await Event.find(finalQuery)
       .populate("organizerId", "fullName email profilePicture")
       .populate("clubId", "name logo")
       .populate("departmentId", "name code")
-      .sort({ [sortBy]: sortOrder })
+      .sort(sortObject)
       .skip(skip)
       .limit(parseInt(limit));
 
-    const total = await Event.countDocuments(query);
+    const total = await Event.countDocuments(finalQuery);
 
     // If user is logged in, check registration status for each event
     let eventsWithRegistrationStatus = events;
@@ -309,7 +445,8 @@ exports.getEvent = async (req, res, next) => {
 
       if (userRegistration) {
         eventWithRegistrationStatus.isRegistered = true;
-        eventWithRegistrationStatus.registrationStatus = userRegistration.status;
+        eventWithRegistrationStatus.registrationStatus =
+          userRegistration.status;
       } else {
         eventWithRegistrationStatus.isRegistered = false;
         eventWithRegistrationStatus.registrationStatus = null;
@@ -354,24 +491,39 @@ exports.updateEvent = async (req, res, next) => {
 
     // CRITICAL: Check if event has already started - lock critical fields
     const eventHasStarted = new Date() >= new Date(event.startDateTime);
-    const eventIsOngoing = new Date() >= new Date(event.startDateTime) && new Date() <= new Date(event.endDateTime);
+    const eventIsOngoing =
+      new Date() >= new Date(event.startDateTime) &&
+      new Date() <= new Date(event.endDateTime);
     const eventHasEnded = new Date() > new Date(event.endDateTime);
 
     // Lock critical fields once event starts
     if (eventHasStarted) {
       const lockedFields = [
-        'title', 'eventType', 'startDateTime', 'endDateTime',
-        'minTeamSize', 'maxTeamSize', 'isPaid', 'amount',
-        'eligibility', 'eligibleYears', 'eligibleDepartments',
-        'allowExternalStudents', 'requiresApproval'
+        "title",
+        "eventType",
+        "startDateTime",
+        "endDateTime",
+        "minTeamSize",
+        "maxTeamSize",
+        "isPaid",
+        "amount",
+        "eligibility",
+        "eligibleYears",
+        "eligibleDepartments",
+        "allowExternalStudents",
+        "requiresApproval",
       ];
-      
+
       for (const field of lockedFields) {
         if (req.body[field] !== undefined && req.body[field] !== event[field]) {
           // Allow array comparison for eligibleYears and eligibleDepartments
-          if ((field === 'eligibleYears' || field === 'eligibleDepartments') && 
-              Array.isArray(req.body[field]) && Array.isArray(event[field]) &&
-              JSON.stringify(req.body[field].sort()) === JSON.stringify(event[field].sort())) {
+          if (
+            (field === "eligibleYears" || field === "eligibleDepartments") &&
+            Array.isArray(req.body[field]) &&
+            Array.isArray(event[field]) &&
+            JSON.stringify(req.body[field].sort()) ===
+              JSON.stringify(event[field].sort())
+          ) {
             continue; // Arrays are same, allow
           }
           return next(
@@ -389,7 +541,7 @@ exports.updateEvent = async (req, res, next) => {
       const newDeadline = new Date(req.body.registrationDeadline);
       const oldDeadline = new Date(event.registrationDeadline);
       const now = new Date();
-      
+
       if (oldDeadline < now && newDeadline > now) {
         return next(
           new AppError(
@@ -401,12 +553,15 @@ exports.updateEvent = async (req, res, next) => {
     }
 
     // Validate maxParticipants cannot be reduced below current confirmed registrations
-    if (req.body.maxParticipants !== undefined && req.body.maxParticipants < event.maxParticipants) {
+    if (
+      req.body.maxParticipants !== undefined &&
+      req.body.maxParticipants < event.maxParticipants
+    ) {
       const confirmedCount = await EventRegistration.countDocuments({
         event: event._id,
-        status: { $in: ['confirmed', 'pending'] }
+        status: { $in: ["confirmed", "pending"] },
       });
-      
+
       if (req.body.maxParticipants < confirmedCount) {
         return next(
           new AppError(
@@ -420,17 +575,21 @@ exports.updateEvent = async (req, res, next) => {
     // Validate event status transitions
     if (req.body.status && req.body.status !== event.status) {
       const validTransitions = {
-        draft: ['published', 'cancelled'],
-        published: ['ongoing', 'cancelled'],
-        ongoing: ['completed', 'cancelled'],
+        draft: ["published", "cancelled"],
+        published: ["ongoing", "cancelled"],
+        ongoing: ["completed", "cancelled"],
         completed: [], // Cannot transition from completed
-        cancelled: [] // Cannot transition from cancelled
+        cancelled: [], // Cannot transition from cancelled
       };
-      
+
       if (!validTransitions[event.status].includes(req.body.status)) {
         return next(
           new AppError(
-            `Invalid status transition from ${event.status} to ${req.body.status}. Allowed transitions: ${validTransitions[event.status].join(', ') || 'none'}.`,
+            `Invalid status transition from ${event.status} to ${
+              req.body.status
+            }. Allowed transitions: ${
+              validTransitions[event.status].join(", ") || "none"
+            }.`,
             400
           )
         );
@@ -438,13 +597,17 @@ exports.updateEvent = async (req, res, next) => {
     }
 
     // Auto-transition status to 'ongoing' if event has started
-    if (eventIsOngoing && event.status === 'published' && !req.body.status) {
-      req.body.status = 'ongoing';
+    if (eventIsOngoing && event.status === "published" && !req.body.status) {
+      req.body.status = "ongoing";
     }
 
     // Auto-transition status to 'completed' if event has ended
-    if (eventHasEnded && (event.status === 'ongoing' || event.status === 'published') && !req.body.status) {
-      req.body.status = 'completed';
+    if (
+      eventHasEnded &&
+      (event.status === "ongoing" || event.status === "published") &&
+      !req.body.status
+    ) {
+      req.body.status = "completed";
     }
 
     // Check for duplicate title if title is being updated

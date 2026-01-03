@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMyFeedback, useCreateFeedback } from "@/hooks";
-import { useEvents } from "@/hooks/useEvents";
+import { useMyRegistrations } from "@/hooks/useRegistrations";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -57,14 +57,33 @@ export default function FeedbackPage() {
   const { data: feedbackResponse, isLoading } = useMyFeedback();
 
   const feedbackList = feedbackResponse?.data || [];
-  const { data: eventsData } = useEvents({ limit: 100 });
+
+  // Fetch only completed events that user attended
+  const { data: registrationsData } = useMyRegistrations({
+    status: "confirmed",
+    limit: 100,
+  });
+
+  // Filter to only completed events that user attended
+  const attendedCompletedEvents = useMemo(() => {
+    if (!registrationsData?.data) return [];
+
+    return registrationsData.data
+      .filter((reg: any) => {
+        const event = reg.event;
+        // Check if event is completed and user has checked in
+        return event?.status === "completed" && reg.checkInTime;
+      })
+      .map((reg: any) => reg.event);
+  }, [registrationsData]);
+
   const createFeedback = useCreateFeedback();
 
   const form = useForm<FeedbackFormValues>({
     resolver: zodResolver(feedbackSchema),
     defaultValues: {
       eventId: "",
-      overallRating: 5,
+      overallRating: undefined,
       comment: "",
     },
   });
@@ -104,7 +123,16 @@ export default function FeedbackPage() {
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button
+              onClick={(e) => {
+                if (attendedCompletedEvents.length === 0) {
+                  e.preventDefault();
+                  toast.info(
+                    "You don't have any completed events to provide feedback for. Complete and attend an event first."
+                  );
+                }
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Submit Feedback
             </Button>
@@ -133,15 +161,21 @@ export default function FeedbackPage() {
                       >
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select an event" />
+                            <SelectValue placeholder="Select a completed event" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {eventsData?.data?.events.map((event: any) => (
-                            <SelectItem key={event._id} value={event._id}>
-                              {event.title}
-                            </SelectItem>
-                          ))}
+                          {attendedCompletedEvents.length === 0 ? (
+                            <div className="p-2 text-sm text-muted-foreground text-center">
+                              No completed events available for feedback
+                            </div>
+                          ) : (
+                            attendedCompletedEvents.map((event: any) => (
+                              <SelectItem key={event._id} value={event._id}>
+                                {event.title}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -154,7 +188,7 @@ export default function FeedbackPage() {
                   name="overallRating"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Rating</FormLabel>
+                      <FormLabel>Rating *</FormLabel>
                       <FormControl>
                         <div className="flex gap-2">
                           {Array.from({ length: 5 }).map((_, i) => (
@@ -166,7 +200,7 @@ export default function FeedbackPage() {
                             >
                               <Star
                                 className={`h-8 w-8 transition-colors ${
-                                  i < field.value
+                                  field.value && i < field.value
                                     ? "fill-yellow-400 text-yellow-400"
                                     : "text-muted-foreground hover:text-yellow-200"
                                 }`}

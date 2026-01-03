@@ -111,11 +111,11 @@ export default function UsersPage() {
     },
   });
 
-  const users = usersResponse?.data?.users || [];
+  const users = usersResponse?.data?.users || usersResponse?.data || [];
   const filteredUsers = users.filter(
     (user: any) =>
-      user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase())
+      user.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const isSuperAdmin = currentUser?.role === "super_admin";

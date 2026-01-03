@@ -115,24 +115,6 @@ const navigation = [
     icon: CheckSquare,
     roles: ["admin", "super_admin"],
   },
-  {
-    name: "Payments",
-    href: "/payments",
-    icon: CreditCard,
-    roles: ["admin", "super_admin"],
-  },
-  {
-    name: "Certificates",
-    href: "/certificates",
-    icon: Award,
-    roles: ["admin", "super_admin"],
-  },
-  {
-    name: "Feedback",
-    href: "/feedback",
-    icon: MessageSquare,
-    roles: ["admin", "super_admin"],
-  },
 ];
 
 export default function Sidebar() {

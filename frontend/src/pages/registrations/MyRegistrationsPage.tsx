@@ -38,7 +38,6 @@ import {
   Eye,
   X,
   Users,
-  DollarSign,
   CheckCircle2,
   AlertCircle,
   CreditCard,
@@ -52,6 +51,7 @@ const MyRegistrationsPage = () => {
   const [filters, setFilters] = useState({
     status: "",
     paymentStatus: "",
+    eventMode: "",
     page: 1,
     limit: 20,
   });
@@ -59,6 +59,10 @@ const MyRegistrationsPage = () => {
 
   const { data: registrations, isLoading } = useMyRegistrations(filters);
   const cancelRegistration = useCancelRegistration();
+
+  // Debug: Log registrations data
+  console.log("Registrations data:", registrations);
+  console.log("Registrations.data:", registrations?.data);
 
   const handleCancelRegistration = async (registrationId: string) => {
     // NULL CHECK: Validate registrationId
@@ -238,7 +242,6 @@ const MyRegistrationsPage = () => {
   const getPaymentStatusBadge = (status: string) => {
     switch (status) {
       case "paid":
-      case "completed":
         return (
           <Badge variant="default" className="bg-green-500">
             <CheckCircle2 className="w-3 h-3 mr-1" />
@@ -291,7 +294,11 @@ const MyRegistrationsPage = () => {
         <Select
           value={filters.status}
           onValueChange={(value) =>
-            setFilters({ ...filters, status: value, page: 1 })
+            setFilters({
+              ...filters,
+              status: value === "all" ? "" : value,
+              page: 1,
+            })
           }
         >
           <SelectTrigger className="w-full sm:w-50">
@@ -309,7 +316,11 @@ const MyRegistrationsPage = () => {
         <Select
           value={filters.paymentStatus}
           onValueChange={(value) =>
-            setFilters({ ...filters, paymentStatus: value, page: 1 })
+            setFilters({
+              ...filters,
+              paymentStatus: value === "all" ? "" : value,
+              page: 1,
+            })
           }
         >
           <SelectTrigger className="w-full sm:w-50">
@@ -317,9 +328,31 @@ const MyRegistrationsPage = () => {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Payments</SelectItem>
-            <SelectItem value="completed">Paid</SelectItem>
+            <SelectItem value="paid">Paid</SelectItem>
             <SelectItem value="pending">Pending</SelectItem>
             <SelectItem value="failed">Failed</SelectItem>
+            <SelectItem value="not_required">Not Required</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={filters.eventMode}
+          onValueChange={(value) =>
+            setFilters({
+              ...filters,
+              eventMode: value === "all" ? "" : value,
+              page: 1,
+            })
+          }
+        >
+          <SelectTrigger className="w-full sm:w-50">
+            <SelectValue placeholder="Event Mode" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Modes</SelectItem>
+            <SelectItem value="online">Online</SelectItem>
+            <SelectItem value="offline">Offline</SelectItem>
+            <SelectItem value="hybrid">Hybrid</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -413,26 +446,35 @@ const MyRegistrationsPage = () => {
                   {/* Amount */}
                   <TableCell>
                     {registration.event.isPaid ? (
-                      <div className="flex items-center gap-1 text-sm font-medium">
-                        <DollarSign className="w-3 h-3" />
+                      <span className="text-sm font-medium">
                         {formatCurrency(
                           registration.event.amount,
                           registration.event.currency
                         )}
-                      </div>
+                      </span>
                     ) : (
-                      <span className="text-sm text-muted-foreground">-</span>
+                      <span className="text-sm text-muted-foreground">
+                        Free
+                      </span>
                     )}
                   </TableCell>
 
                   {/* Team */}
                   <TableCell>
-                    {registration.event.isTeamEvent ? (
-                      registration.teamId ? (
-                        <Badge variant="outline" className="text-xs">
-                          <Users className="w-3 h-3 mr-1" />
-                          Team
-                        </Badge>
+                    {registration.event.maxTeamSize > 1 ||
+                    registration.event.isTeamEvent ? (
+                      registration.team || registration.teamId ? (
+                        <div className="flex flex-col gap-1">
+                          <Badge variant="outline" className="text-xs">
+                            <Users className="w-3 h-3 mr-1" />
+                            {registration.team?.name || "Team"}
+                          </Badge>
+                          {registration.team?.teamCode && (
+                            <span className="text-xs text-muted-foreground">
+                              Code: {registration.team.teamCode}
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <Badge variant="secondary" className="text-xs">
                           No Team
@@ -511,7 +553,7 @@ const MyRegistrationsPage = () => {
                                 registration for "{registration.event.title}"?
                                 This action cannot be undone.
                                 {registration.event.isPaid &&
-                                  registration.paymentStatus === "completed" &&
+                                  registration.paymentStatus === "paid" &&
                                   " A refund will be initiated according to the refund policy."}
                               </AlertDialogDescription>
                             </AlertDialogHeader>

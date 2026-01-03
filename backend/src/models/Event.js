@@ -119,6 +119,7 @@ const eventSchema = new mongoose.Schema(
     images: [
       {
         type: String,
+        // No maxlength constraint - allow large base64 strings
       },
     ],
     requiresApproval: {
@@ -127,6 +128,7 @@ const eventSchema = new mongoose.Schema(
     },
     bannerImage: {
       type: String,
+      // No maxlength constraint - allow large base64 strings
     },
     isPaid: {
       type: Boolean,

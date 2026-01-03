@@ -119,6 +119,7 @@ exports.getAllUsers = asyncHandler(async (req, res) => {
 
   const users = await User.find(filter)
     .select("-password -resetPasswordToken -resetPasswordExpire")
+    .populate("departmentId", "name code")
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));
@@ -127,7 +128,9 @@ exports.getAllUsers = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    data: users,
+    data: {
+      users: users,
+    },
     pagination: {
       total,
       page: parseInt(page),

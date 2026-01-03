@@ -140,7 +140,7 @@ exports.registerForEvent = asyncHandler(async (req, res) => {
   }
 
   // TRANSACTION: Use MongoDB session for atomicity (works with both standalone and replica set)
-  const registration = await withTransaction(async (session) => {
+  const registrations = await withTransaction(async (session) => {
     // RACE CONDITION FIX: Check capacity atomically
     // Without transaction (standalone), this provides best-effort protection
     // With transaction (replica set), this provides full ACID guarantees
@@ -165,12 +165,60 @@ exports.registerForEvent = asyncHandler(async (req, res) => {
 
     // Create registration (with or without session)
     const createOptions = session ? { session } : {};
-    const [newRegistration] = await EventRegistration.create(
-      [
+
+    // FIX: If team registration, create registrations for ALL team members
+    let registrationDocs = [];
+    if (team) {
+      // Check if user is team leader
+      const isLeader = team.leader.toString() === req.user._id.toString();
+
+      if (isLeader) {
+        // Leader is registering - auto-register all team members
+        const teamMembers = await User.find({ _id: { $in: team.members } });
+
+        registrationDocs = teamMembers.map((member) => ({
+          event: eventId,
+          user: member._id,
+          team: team._id,
+          emergencyContact:
+            member._id.toString() === req.user._id.toString()
+              ? emergencyContact
+              : undefined,
+          specialRequirements:
+            member._id.toString() === req.user._id.toString()
+              ? specialRequirements
+              : undefined,
+          participantInfo:
+            member._id.toString() === req.user._id.toString()
+              ? participantInfo
+              : undefined,
+          registrationDate: new Date(),
+          status: registrationStatus,
+          paymentStatus: event.isPaid ? "pending" : "not_required",
+        }));
+      } else {
+        // Team member is registering individually (should not happen if leader locked)
+        registrationDocs = [
+          {
+            event: eventId,
+            user: req.user._id,
+            team: team._id,
+            emergencyContact,
+            specialRequirements,
+            participantInfo,
+            registrationDate: new Date(),
+            status: registrationStatus,
+            paymentStatus: event.isPaid ? "pending" : "not_required",
+          },
+        ];
+      }
+    } else {
+      // Solo registration
+      registrationDocs = [
         {
           event: eventId,
           user: req.user._id,
-          team: team ? team._id : null,
+          team: null,
           emergencyContact,
           specialRequirements,
           participantInfo,
@@ -178,7 +226,11 @@ exports.registerForEvent = asyncHandler(async (req, res) => {
           status: registrationStatus,
           paymentStatus: event.isPaid ? "pending" : "not_required",
         },
-      ],
+      ];
+    }
+
+    const newRegistrations = await EventRegistration.create(
+      registrationDocs,
       createOptions
     );
 
@@ -187,13 +239,18 @@ exports.registerForEvent = asyncHandler(async (req, res) => {
       const updateOptions = session ? { session } : {};
       await Event.findByIdAndUpdate(
         eventId,
-        { $inc: { registeredCount: 1 } },
+        { $inc: { registeredCount: newRegistrations.length } },
         updateOptions
       );
     }
 
-    return newRegistration;
+    return newRegistrations;
   });
+
+  // Get the current user's registration for response
+  const registration = Array.isArray(registrations)
+    ? registrations.find((r) => r.user.toString() === req.user._id.toString())
+    : registrations;
 
   // Populate fields after transaction
   await registration.populate([
@@ -260,12 +317,42 @@ exports.registerForEvent = asyncHandler(async (req, res) => {
     logger.error("Failed to create notification:", error);
   }
 
+  // If team registration by leader, notify all team members
+  if (
+    team &&
+    team.leader.toString() === req.user._id.toString() &&
+    Array.isArray(registrations) &&
+    registrations.length > 1
+  ) {
+    const teamMembers = await User.find({
+      _id: { $in: team.members, $ne: req.user._id },
+    }).select("email fullName");
+
+    for (const member of teamMembers) {
+      try {
+        await Notification.create({
+          recipient: member._id,
+          sentBy: req.user._id,
+          title: "Team Registration Successful",
+          message: `Your team leader has registered your team "${team.name}" for ${event.title}.`,
+          type: "registration",
+          relatedEvent: eventId,
+          channels: ["in_app", "email"],
+        });
+      } catch (error) {
+        logger.error(`Failed to notify team member ${member._id}:`, error);
+      }
+    }
+  }
+
   // Return response
   res.status(201).json({
     success: true,
     data: registration,
     message: event.isPaid
       ? "Registration created. Please complete payment to confirm."
+      : team && team.leader.toString() === req.user._id.toString()
+      ? `Successfully registered your team! All ${registrations.length} team members have been registered.`
       : "Successfully registered for the event!",
   });
 });
@@ -276,27 +363,82 @@ exports.registerForEvent = asyncHandler(async (req, res) => {
  * @access  Private
  */
 exports.getMyRegistrations = asyncHandler(async (req, res) => {
-  const { status, paymentStatus, page = 1, limit = 10 } = req.query;
+  const {
+    status,
+    paymentStatus,
+    eventMode,
+    mode,
+    page = 1,
+    limit = 10,
+  } = req.query;
 
   const filter = { user: req.user._id };
 
-  if (status) {
+  if (status && status !== "all") {
     filter.status = status;
   }
 
-  if (paymentStatus) {
+  if (paymentStatus && paymentStatus !== "all") {
     filter.paymentStatus = paymentStatus;
   }
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
+  // Build query for event filters
+  let query = EventRegistration.find(filter);
+
+  // If eventMode filter is applied, we need to filter by event.eventMode
+  const modeValue = mode || eventMode;
+  if (modeValue && modeValue !== "all") {
+    // First get all registrations, then filter by populated event.eventMode
+    const allRegistrations = await EventRegistration.find(filter)
+      .populate({
+        path: "event",
+        select:
+          "title startDateTime endDateTime eventType venue bannerImage isPaid amount currency maxTeamSize category eventMode",
+        match: { eventMode: modeValue },
+      })
+      .populate({
+        path: "team",
+        select: "name members leader teamCode",
+      })
+      .populate("payment", "amount paymentMethod transactionId paidAt status")
+      .sort({ createdAt: -1 });
+
+    // Filter out registrations where event is null (didn't match eventMode)
+    const filteredRegistrations = allRegistrations.filter(
+      (reg) => reg.event !== null
+    );
+
+    const total = filteredRegistrations.length;
+    const paginatedRegistrations = filteredRegistrations.slice(
+      skip,
+      skip + parseInt(limit)
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: paginatedRegistrations,
+      pagination: {
+        total,
+        page: parseInt(page),
+        pages: Math.ceil(total / parseInt(limit)),
+        limit: parseInt(limit),
+      },
+    });
+  }
+
   const registrations = await EventRegistration.find(filter)
-    .populate(
-      "event",
-      "title startDateTime endDateTime eventType venue banner isPaid amount currency isTeamEvent category"
-    )
-    .populate("team", "name members")
-    .populate("payment", "amount paymentMethod transactionId paidAt")
+    .populate({
+      path: "event",
+      select:
+        "title startDateTime endDateTime eventType venue bannerImage isPaid amount currency maxTeamSize category eventMode",
+    })
+    .populate({
+      path: "team",
+      select: "name members leader teamCode",
+    })
+    .populate("payment", "amount paymentMethod transactionId paidAt status")
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));

@@ -9,22 +9,18 @@ export * from "./useTheme";
 export * from "./usePayments";
 export * from "./useCertificates";
 
-// Placeholder exports for missing hooks
-export const useAnalytics = () => ({
-  data: {
-    data: {
-      totalEvents: 0,
-      totalRegistrations: 0,
-      totalRevenue: 0,
-      attendanceRate: 0,
-      activeUsers: 0,
-      certificatesIssued: 0,
-      topEvents: [],
-      revenueByType: [],
-    },
-  },
-  isLoading: false,
-});
+// Admin analytics hook
+import { useQuery } from "@tanstack/react-query";
+import { adminApi } from "@/api";
+import { QUERY_KEYS } from "@/constants";
+
+export const useAnalytics = () => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.ADMIN_DASHBOARD],
+    queryFn: () => adminApi.getDashboard(),
+  });
+};
+
 export const useMarkNotificationAsRead = () => ({
   mutateAsync: async (_id: string) => {},
   isPending: false,

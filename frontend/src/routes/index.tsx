@@ -97,7 +97,14 @@ export default function AppRoutes() {
         <Route
           path="events/create"
           element={
-            <ProtectedRoute requiredRole={["department_organizer", "faculty"]}>
+            <ProtectedRoute
+              requiredRole={[
+                "department_organizer",
+                "faculty",
+                "admin",
+                "super_admin",
+              ]}
+            >
               <CreateEventPage />
             </ProtectedRoute>
           }
@@ -107,7 +114,14 @@ export default function AppRoutes() {
         <Route
           path="events/:id/edit"
           element={
-            <ProtectedRoute requiredRole={["department_organizer", "faculty"]}>
+            <ProtectedRoute
+              requiredRole={[
+                "department_organizer",
+                "faculty",
+                "admin",
+                "super_admin",
+              ]}
+            >
               <CreateEventPage />
             </ProtectedRoute>
           }
@@ -115,7 +129,14 @@ export default function AppRoutes() {
         <Route
           path="events/:eventId/participants"
           element={
-            <ProtectedRoute requiredRole={["department_organizer", "faculty"]}>
+            <ProtectedRoute
+              requiredRole={[
+                "department_organizer",
+                "faculty",
+                "admin",
+                "super_admin",
+              ]}
+            >
               <ParticipantsPage />
             </ProtectedRoute>
           }
@@ -123,7 +144,14 @@ export default function AppRoutes() {
         <Route
           path="events/:eventId/rounds"
           element={
-            <ProtectedRoute requiredRole={["department_organizer", "faculty"]}>
+            <ProtectedRoute
+              requiredRole={[
+                "department_organizer",
+                "faculty",
+                "admin",
+                "super_admin",
+              ]}
+            >
               <RoundManagementPage />
             </ProtectedRoute>
           }
@@ -131,7 +159,14 @@ export default function AppRoutes() {
         <Route
           path="events/:eventId/results"
           element={
-            <ProtectedRoute requiredRole={["department_organizer", "faculty"]}>
+            <ProtectedRoute
+              requiredRole={[
+                "department_organizer",
+                "faculty",
+                "admin",
+                "super_admin",
+              ]}
+            >
               <ResultsManagementPage />
             </ProtectedRoute>
           }
