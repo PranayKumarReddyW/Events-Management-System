@@ -160,7 +160,7 @@ export default function EventDetailPage() {
   // Check if current user has already registered (exclude cancelled/rejected)
   // Prioritize the isRegistered field from the event API response if available
   const { data: myRegistrationsData, refetch: refetchMyRegistrations } =
-    useMyRegistrations({ status: "all" });
+    useMyRegistrations();
   const myRegistrations = myRegistrationsData?.data || [];
 
   // Use isRegistered from event if available (from backend), otherwise fall back to checking myRegistrations
@@ -253,8 +253,19 @@ export default function EventDetailPage() {
         return;
       }
 
-      // Refetch registrations and event to update UI state
-      await Promise.all([refetchMyRegistrations(), refetch()]);
+      // Refetch both registrations and event detail to update UI state
+      const [updatedRegs, updatedEvent] = await Promise.all([
+        refetchMyRegistrations(),
+        refetch(),
+      ]);
+
+      console.log("After registration refetch:", {
+        updatedRegs: updatedRegs.data?.data,
+        updatedEvent: updatedEvent.data?.data?.event?.isRegistered,
+      });
+
+      // Force a longer delay to ensure state propagates
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       // If event is paid, trigger payment immediately
       if (event?.isPaid && registration) {
@@ -263,10 +274,10 @@ export default function EventDetailPage() {
           initiatePayment(registration._id, event.title);
         }, 500);
       } else {
-        toast.success("Registration successful!");
-        setTimeout(() => {
-          navigate("/registrations");
-        }, 1000);
+        toast.success(
+          "Registration successful! You are now registered for this event."
+        );
+        // Don't navigate away - let users see the updated "Already Registered" status
       }
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Registration failed");

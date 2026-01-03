@@ -20,9 +20,18 @@ import { toast } from "sonner";
 export default function CertificatesPage() {
   const [search, setSearch] = useState("");
   const [downloading, setDownloading] = useState<string | null>(null);
-  const { data: certificatesResponse, isLoading } = useCertificates();
+  const { data: certificatesResponse, isLoading, error } = useCertificates();
 
-  const certificates = certificatesResponse?.data || [];
+  const certificates = Array.isArray(certificatesResponse?.data)
+    ? certificatesResponse.data
+    : [];
+
+  // Filter certificates based on search
+  const filteredCertificates = certificates.filter(
+    (cert: any) =>
+      cert.event?.title?.toLowerCase().includes(search.toLowerCase()) ||
+      cert.certificateNumber?.toLowerCase().includes(search.toLowerCase())
+  );
 
   const handleDownload = async (
     certificateId: string,
@@ -98,7 +107,17 @@ export default function CertificatesPage() {
             </Card>
           ))}
         </div>
-      ) : certificates?.length === 0 ? (
+      ) : error ? (
+        <div className="text-center py-12">
+          <Award className="mx-auto h-12 w-12 text-destructive" />
+          <h3 className="mt-4 text-lg font-semibold">
+            Error loading certificates
+          </h3>
+          <p className="text-muted-foreground">
+            Please try refreshing the page
+          </p>
+        </div>
+      ) : filteredCertificates.length === 0 ? (
         <div className="text-center py-12">
           <Award className="mx-auto h-12 w-12 text-muted-foreground" />
           <h3 className="mt-4 text-lg font-semibold">No certificates yet</h3>
@@ -110,7 +129,7 @@ export default function CertificatesPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {certificates?.map((cert: any) => (
+          {filteredCertificates.map((cert: any) => (
             <Card key={cert._id}>
               <CardHeader>
                 <div className="flex items-start justify-between gap-2">
