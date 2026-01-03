@@ -69,7 +69,6 @@ import {
   Calendar,
   MapPin,
   Users,
-  ArrowLeft,
   Edit,
   Trash2,
   Award,

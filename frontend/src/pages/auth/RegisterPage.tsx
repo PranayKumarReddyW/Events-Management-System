@@ -173,9 +173,6 @@ export default function RegisterPage() {
                   control={form.control}
                   name="password"
                   render={({ field }) => {
-                    const passwordValidation = validatePassword(
-                      field.value || ""
-                    );
                     return (
                       <FormItem>
                         <FormLabel>Password</FormLabel>

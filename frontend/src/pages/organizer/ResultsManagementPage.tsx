@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { eventsApi } from "@/api/events";
 import { registrationsApi } from "@/api/registrations";
 import { certificatesApi } from "@/api/certificates";
@@ -65,7 +65,6 @@ interface Result {
 
 export default function ResultsManagementPage() {
   const { eventId } = useParams<{ eventId: string }>();
-  const navigate = useNavigate();
   const [event, setEvent] = useState<any>(null);
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [results, setResults] = useState<Result[]>([]);
@@ -107,7 +106,7 @@ export default function ResultsManagementPage() {
       console.log("📦 Response data structure:", regsRes.data);
 
       setEvent(eventRes.data?.event);
-      const fetchedRegistrations = regsRes.data || [];
+      const fetchedRegistrations = regsRes.data?.data || [];
 
       console.log("🔍 All registrations:", fetchedRegistrations);
       console.log("📊 Total fetched:", fetchedRegistrations.length);
@@ -139,7 +138,7 @@ export default function ResultsManagementPage() {
       setRegistrations(validRegistrations);
 
       // Check if certificates are already generated
-      if (eventRes.data?.event?.certificatesGenerated) {
+      if ((eventRes.data?.event as any)?.certificatesGenerated) {
         setCertificatesGenerated(true);
       }
 

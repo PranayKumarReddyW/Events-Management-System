@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { registrationsApi } from "@/api/registrations";
 import { eventsApi } from "@/api/events";
 import { format } from "date-fns";
@@ -46,7 +46,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import {
-  ArrowLeft,
   Search,
   Download,
   MoreVertical,
@@ -62,7 +61,6 @@ import type { EventRegistration, Event } from "@/types";
 
 export default function ParticipantsPage() {
   const { eventId } = useParams<{ eventId: string }>();
-  const navigate = useNavigate();
   const [event, setEvent] = useState<Event | null>(null);
   const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
   const [stats, setStats] = useState<any>(null);

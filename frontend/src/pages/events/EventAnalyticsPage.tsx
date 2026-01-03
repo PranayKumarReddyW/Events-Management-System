@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { eventsApi } from "@/api/events";
 import { registrationsApi } from "@/api/registrations";
@@ -27,7 +27,6 @@ import { formatCurrency } from "@/utils/helpers";
 
 export default function EventAnalyticsPage() {
   const { eventId } = useParams<{ eventId: string }>();
-  const navigate = useNavigate();
 
   const { data: eventData, isLoading: eventLoading } = useQuery({
     queryKey: ["event", eventId],
