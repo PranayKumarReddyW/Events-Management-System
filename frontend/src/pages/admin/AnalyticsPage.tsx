@@ -1,0 +1,228 @@
+import { useAnalytics } from "@/hooks";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useState } from "react";
+import {
+  Users,
+  Calendar,
+  DollarSign,
+  TrendingUp,
+  Award,
+  UserCheck,
+} from "lucide-react";
+import { formatCurrency } from "@/utils/helpers";
+
+export default function AnalyticsPage() {
+  const [timeRange, setTimeRange] = useState("30");
+  const { data: analyticsResponse, isLoading } = useAnalytics();
+
+  const analytics = analyticsResponse?.data;
+
+  const stats = [
+    {
+      title: "Total Events",
+      value: analytics?.totalEvents || 0,
+      change: "+12%",
+      icon: Calendar,
+      color: "text-blue-600",
+      bgColor: "bg-blue-100",
+    },
+    {
+      title: "Total Registrations",
+      value: analytics?.totalRegistrations || 0,
+      change: "+18%",
+      icon: Users,
+      color: "text-green-600",
+      bgColor: "bg-green-100",
+    },
+    {
+      title: "Revenue Generated",
+      value: formatCurrency(analytics?.totalRevenue || 0),
+      change: "+25%",
+      icon: DollarSign,
+      color: "text-purple-600",
+      bgColor: "bg-purple-100",
+    },
+    {
+      title: "Attendance Rate",
+      value: `${analytics?.attendanceRate || 0}%`,
+      change: "+5%",
+      icon: UserCheck,
+      color: "text-orange-600",
+      bgColor: "bg-orange-100",
+    },
+    {
+      title: "Active Users",
+      value: analytics?.activeUsers || 0,
+      change: "+15%",
+      icon: TrendingUp,
+      color: "text-indigo-600",
+      bgColor: "bg-indigo-100",
+    },
+    {
+      title: "Certificates Issued",
+      value: analytics?.certificatesIssued || 0,
+      change: "+20%",
+      icon: Award,
+      color: "text-pink-600",
+      bgColor: "bg-pink-100",
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
+          <p className="text-muted-foreground">
+            Monitor event performance and user engagement
+          </p>
+        </div>
+        <Select value={timeRange} onValueChange={setTimeRange}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Select time range" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7">Last 7 days</SelectItem>
+            <SelectItem value="30">Last 30 days</SelectItem>
+            <SelectItem value="90">Last 90 days</SelectItem>
+            <SelectItem value="365">Last year</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-4 w-1/2" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-3/4" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {stats.map((stat) => (
+            <Card key={stat.title}>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {stat.title}
+                </CardTitle>
+                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
+                  <stat.icon className={`h-4 w-4 ${stat.color}`} />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stat.value}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  <span className="text-green-600">{stat.change}</span> from
+                  previous period
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Top Events</CardTitle>
+            <CardDescription>
+              Most popular events by registration count
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="space-y-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {analytics?.topEvents?.map((event: any, index: number) => (
+                  <div
+                    key={event._id}
+                    className="flex items-center justify-between p-3 rounded-lg border"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-semibold">
+                        {index + 1}
+                      </div>
+                      <div>
+                        <p className="font-medium line-clamp-1">
+                          {event.title}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {event.registrationCount} registrations
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )) || (
+                  <p className="text-center text-muted-foreground py-8">
+                    No events data available
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Revenue by Event Type</CardTitle>
+            <CardDescription>
+              Revenue distribution across event categories
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="space-y-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {analytics?.revenueByType?.map((item: any) => (
+                  <div
+                    key={item.type}
+                    className="flex items-center justify-between p-3 rounded-lg border"
+                  >
+                    <span className="font-medium capitalize">{item.type}</span>
+                    <span className="text-lg font-semibold">
+                      {formatCurrency(item.revenue)}
+                    </span>
+                  </div>
+                )) || (
+                  <p className="text-center text-muted-foreground py-8">
+                    No revenue data available
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
