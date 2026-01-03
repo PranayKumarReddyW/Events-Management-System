@@ -1,5 +1,6 @@
 import { useMyRegistrations } from "@/hooks/useRegistrations";
 import { useCancelRegistration } from "@/hooks/useRegistrations";
+import { useAuth } from "@/hooks/useAuth";
 import { paymentsApi } from "@/api/payments";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -48,6 +49,7 @@ import { toast } from "sonner";
 
 const MyRegistrationsPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [filters, setFilters] = useState({
     status: "",
     paymentStatus: "",
@@ -517,7 +519,11 @@ const MyRegistrationsPage = () => {
                         )}
 
                       {registration.event.isPaid &&
-                        registration.paymentStatus === "pending" && (
+                        registration.paymentStatus === "pending" &&
+                        // TEAM PAYMENT: Only show pay button for solo events or team leader
+                        (!registration.team ||
+                          registration.team.leader === user._id ||
+                          registration.team.leader?._id === user._id) && (
                           <Button
                             size="sm"
                             onClick={() => handlePayNow(registration._id)}
@@ -528,6 +534,17 @@ const MyRegistrationsPage = () => {
                               ? "Processing..."
                               : "Pay Now"}
                           </Button>
+                        )}
+
+                      {/* Team member waiting for leader payment */}
+                      {registration.event.isPaid &&
+                        registration.paymentStatus === "pending" &&
+                        registration.team &&
+                        registration.team.leader !== user._id &&
+                        registration.team.leader?._id !== user._id && (
+                          <span className="text-xs text-muted-foreground px-2">
+                            Waiting for team leader payment
+                          </span>
                         )}
 
                       {(registration.status === "confirmed" ||

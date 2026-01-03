@@ -28,7 +28,7 @@ export default function PaymentsPage() {
   const filters = statusFilter !== "all" ? { status: statusFilter as any } : {};
   const { data: paymentsResponse, isLoading } = usePayments(filters);
 
-  const payments = paymentsResponse?.payments || [];
+  const payments = paymentsResponse?.data?.payments || [];
 
   const handleDownloadInvoice = async (
     paymentId: string,

@@ -125,9 +125,9 @@ export default function ResultsManagementPage() {
         console.warn("⚠️ No registrations returned from API");
       }
 
-      // Accept all confirmed registrations
+      // Accept only checked-in registrations for results
       const validRegistrations = fetchedRegistrations.filter(
-        (reg: any) => reg.status === "confirmed"
+        (reg: any) => reg.status === "confirmed" && reg.checkInTime
       );
 
       console.log("✅ Valid registrations:", validRegistrations);

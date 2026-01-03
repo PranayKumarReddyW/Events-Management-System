@@ -21,7 +21,8 @@ exports.initiatePayment = asyncHandler(async (req, res) => {
   // Get registration
   const registration = await EventRegistration.findById(registrationId)
     .populate("event")
-    .populate("user", "fullName email");
+    .populate("user", "fullName email")
+    .populate("team");
 
   if (!registration) {
     throw new AppError("Registration not found", 404);
@@ -43,6 +44,37 @@ exports.initiatePayment = asyncHandler(async (req, res) => {
   // Check if event requires payment
   if (!registration.event.isPaid) {
     throw new AppError("This event does not require payment", 400);
+  }
+
+  // TEAM PAYMENT ENFORCEMENT: Only team leader can initiate payment for team events
+  if (registration.team) {
+    const isLeader =
+      registration.team.leader.toString() === req.user._id.toString();
+
+    if (!isLeader) {
+      throw new AppError(
+        "Only the team leader can make payment for team registrations. Please contact your team leader.",
+        403
+      );
+    }
+
+    // Check if payment already exists for this team
+    const existingTeamPayment = await Payment.findOne({
+      event: registration.event._id,
+      registration: {
+        $in: await EventRegistration.find({
+          team: registration.team._id,
+        }).distinct("_id"),
+      },
+      status: { $in: ["pending", "completed"] },
+    });
+
+    if (existingTeamPayment) {
+      throw new AppError(
+        "Payment has already been initiated for this team",
+        400
+      );
+    }
   }
 
   const amount = registration.event.amount;
@@ -181,7 +213,9 @@ exports.verifyPayment = asyncHandler(async (req, res) => {
   await payment.save();
 
   // RACE CONDITION FIX: Update registration payment status and confirm registration atomically
-  const registration = await EventRegistration.findById(payment.registration);
+  const registration = await EventRegistration.findById(
+    payment.registration
+  ).populate("team");
 
   if (!registration) {
     throw new AppError("Registration not found", 404);
@@ -197,6 +231,36 @@ exports.verifyPayment = asyncHandler(async (req, res) => {
   }
 
   await registration.save();
+
+  // TEAM PAYMENT: If this is a team registration, mark ALL team members as paid
+  if (registration.team) {
+    const teamRegistrations = await EventRegistration.find({
+      team: registration.team._id,
+      event: registration.event,
+      _id: { $ne: registration._id }, // Exclude current registration (already updated)
+    });
+
+    let confirmedCount = 0;
+    for (const teamReg of teamRegistrations) {
+      const wasUnconfirmed = teamReg.status === "pending";
+      teamReg.paymentStatus = "paid";
+      teamReg.payment = payment._id;
+      if (teamReg.status === "pending") {
+        teamReg.status = "confirmed";
+        if (wasUnconfirmed) confirmedCount++;
+      }
+      await teamReg.save();
+    }
+
+    // Update event count for all newly confirmed team members
+    if (confirmedCount > 0) {
+      await Event.findByIdAndUpdate(
+        registration.event,
+        { $inc: { registeredCount: confirmedCount } },
+        { new: false }
+      );
+    }
+  }
 
   // RACE CONDITION FIX: Update event's registeredCount atomically only if status changed
   if (oldStatus === "pending" && registration.status === "confirmed") {

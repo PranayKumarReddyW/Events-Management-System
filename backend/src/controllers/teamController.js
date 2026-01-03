@@ -20,11 +20,18 @@ exports.createTeam = asyncHandler(async (req, res) => {
     throw new AppError("Event not found", 404);
   }
 
-  if ((event.maxTeamSize || 1) <= 1) {
-    throw new AppError("This event does not allow team registration", 400);
+  // CRITICAL: Enforce SOLO event restriction
+  const minTeamSize = event.minTeamSize || 1;
+  const maxTeamSize = event.maxTeamSize || 1;
+
+  if (maxTeamSize <= 1 || minTeamSize > maxTeamSize) {
+    throw new AppError(
+      "This event does not allow team registration. It is a SOLO event (maxTeamSize <= 1).",
+      400
+    );
   }
 
-  // Check if user already has a team for this event
+  // CRITICAL: Check if user already has a team for this SPECIFIC event (prevent duplicates)
   const existingTeam = await Team.findOne({
     event: eventId,
     $or: [{ leader: req.user._id }, { members: req.user._id }],
@@ -32,7 +39,25 @@ exports.createTeam = asyncHandler(async (req, res) => {
   });
 
   if (existingTeam) {
-    throw new AppError("You are already part of a team for this event", 400);
+    throw new AppError(
+      `You are already part of a team for this event. Team: "${existingTeam.name}". A student cannot be in multiple teams for the same event.`,
+      400
+    );
+  }
+
+  // CRITICAL: Check if user has individual registration for this event
+  const individualRegistration = await EventRegistration.findOne({
+    event: eventId,
+    user: req.user._id,
+    team: null,
+    status: { $in: ["pending", "confirmed"] },
+  });
+
+  if (individualRegistration) {
+    throw new AppError(
+      "You are already registered individually for this event. Cannot create a team.",
+      400
+    );
   }
 
   // Create team
@@ -278,7 +303,7 @@ exports.joinTeamWithCode = asyncHandler(async (req, res) => {
     );
   }
 
-  // Check if user is already in another team for this event
+  // CRITICAL: Check if user is already in another team for this event (STRICT enforcement)
   const existingTeam = await Team.findOne({
     event: team.event._id,
     $or: [{ leader: req.user._id }, { members: req.user._id }],
@@ -288,7 +313,31 @@ exports.joinTeamWithCode = asyncHandler(async (req, res) => {
 
   if (existingTeam) {
     throw new AppError(
-      "You are already part of another team for this event",
+      `You are already part of another team for this event: "${existingTeam.name}". A student cannot be in multiple teams for the same event.`,
+      400
+    );
+  }
+
+  // CRITICAL: Check if user has individual registration for this event
+  const individualRegistration = await EventRegistration.findOne({
+    event: team.event._id,
+    user: req.user._id,
+    team: null,
+    status: { $in: ["pending", "confirmed"] },
+  });
+
+  if (individualRegistration) {
+    throw new AppError(
+      "You are already registered individually for this event. Cannot join a team.",
+      400
+    );
+  }
+
+  // CRITICAL: Validate event allows teams (check maxTeamSize)
+  const eventData = await Event.findById(team.event._id);
+  if (eventData && (eventData.maxTeamSize || 1) <= 1) {
+    throw new AppError(
+      "This event does not allow team registration. It is a SOLO event.",
       400
     );
   }

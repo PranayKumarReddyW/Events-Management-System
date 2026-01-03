@@ -46,7 +46,7 @@ export default function EventsPage() {
       filters.sortBy,
       filters.order,
       filters.eventType,
-      filters.eventMode,
+      filters.mode,
       filters.registrationStatus,
       filters.teamType,
     ]
@@ -135,9 +135,9 @@ export default function EventsPage() {
           </SelectContent>
         </Select>
         <Select
-          value={filters.eventMode}
+          value={filters.mode}
           onValueChange={(value) =>
-            handleFilterChange("eventMode", value === "all" ? undefined : value)
+            handleFilterChange("mode", value === "all" ? undefined : value)
           }
         >
           <SelectTrigger>
@@ -173,13 +173,9 @@ export default function EventsPage() {
         </Select>
         <Select
           value={filters.sortBy}
-          onValueChange={(value) => {
-            handleFilterChange("sortBy", value || undefined);
-            // Set default order based on sort field
-            if (value && !filters.order) {
-              handleFilterChange("order", value === "title" ? "asc" : "desc");
-            }
-          }}
+          onValueChange={(value) =>
+            handleFilterChange("sortBy", value || undefined)
+          }
         >
           <SelectTrigger className="w-full sm:w-52">
             <SelectValue placeholder="Sort By" />
@@ -189,20 +185,6 @@ export default function EventsPage() {
             <SelectItem value="createdAt">Created At</SelectItem>
             <SelectItem value="title">Title</SelectItem>
             <SelectItem value="registeredCount">Registrations</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
-          value={filters.order}
-          onValueChange={(value) =>
-            handleFilterChange("order", value || undefined)
-          }
-        >
-          <SelectTrigger className="w-full sm:w-40">
-            <SelectValue placeholder="Order" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="asc">Ascending</SelectItem>
-            <SelectItem value="desc">Descending</SelectItem>
           </SelectContent>
         </Select>
         <Select

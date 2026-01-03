@@ -51,6 +51,44 @@ exports.addResults = asyncHandler(async (req, res) => {
       );
     }
 
+    // CHECK-IN VALIDATION: Verify participant has attended the event
+    if (userId) {
+      const registration = await EventRegistration.findOne({
+        event: eventId,
+        user: userId,
+        checkInTime: { $ne: null },
+      });
+
+      if (!registration) {
+        const userInfo = await User.findById(userId).select("fullName");
+        throw new AppError(
+          `Cannot add result for ${
+            userInfo?.fullName || "participant"
+          } - participant must check in before results can be added`,
+          400
+        );
+      }
+    }
+
+    if (teamId) {
+      // For team results, verify at least one team member has checked in
+      const teamRegistrations = await EventRegistration.find({
+        event: eventId,
+        team: teamId,
+        checkInTime: { $ne: null },
+      });
+
+      if (teamRegistrations.length === 0) {
+        const teamInfo = await Team.findById(teamId).select("name");
+        throw new AppError(
+          `Cannot add result for ${
+            teamInfo?.name || "team"
+          } - at least one team member must check in before results can be added`,
+          400
+        );
+      }
+    }
+
     // RACE CONDITION FIX: Check if result already exists for this position
     const existingResult = await EventResult.findOne({
       eventId,

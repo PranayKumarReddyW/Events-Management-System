@@ -43,10 +43,12 @@ export interface ProcessRefundData {
   notes?: string;
 }
 
-// Backend returns payments directly in response, not nested
+// Backend returns payments nested in data object
 export interface PaymentsApiResponse {
   success: boolean;
-  payments: Payment[];
+  data: {
+    payments: Payment[];
+  };
   pagination: Pagination;
   stats?: {
     totalPayments: number;

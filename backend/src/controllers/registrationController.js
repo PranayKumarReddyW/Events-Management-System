@@ -39,6 +39,21 @@ exports.registerForEvent = asyncHandler(async (req, res) => {
     throw new AppError("Event not found", 404);
   }
 
+  // CRITICAL: Lock ongoing/completed events from new registrations
+  if (event.status === "ongoing") {
+    throw new AppError(
+      "Event is currently ONGOING. No new registrations allowed.",
+      400
+    );
+  }
+
+  if (event.status === "completed" || event.status === "cancelled") {
+    throw new AppError(
+      `Event is ${event.status.toUpperCase()}. Registration is closed.`,
+      400
+    );
+  }
+
   if (event.status !== "published") {
     throw new AppError("Event is not open for registration", 400);
   }
@@ -56,6 +71,28 @@ exports.registerForEvent = asyncHandler(async (req, res) => {
 
   if (existingRegistration) {
     throw new AppError("You are already registered for this event", 400);
+  }
+
+  // CRITICAL: Determine if event is SOLO or TEAM based
+  const minTeamSize = event.minTeamSize || 1;
+  const maxTeamSize = event.maxTeamSize || 1;
+  const isTeamEvent = maxTeamSize > 1;
+  const isSoloEvent = maxTeamSize <= 1;
+
+  // CRITICAL: Enforce SOLO event - no teams allowed
+  if (isSoloEvent && teamId) {
+    throw new AppError(
+      "This is a SOLO event (maxTeamSize <= 1). Team registration is not allowed. Register individually.",
+      400
+    );
+  }
+
+  // CRITICAL: Enforce TEAM event - teams required if minTeamSize > 1
+  if (isTeamEvent && minTeamSize > 1 && !teamId) {
+    throw new AppError(
+      `This event requires TEAM registration (minTeamSize: ${minTeamSize}). You must create or join a team first.`,
+      400
+    );
   }
 
   // Handle team registration
@@ -401,6 +438,7 @@ exports.getMyRegistrations = asyncHandler(async (req, res) => {
       .populate({
         path: "team",
         select: "name members leader teamCode",
+        populate: { path: "leader", select: "_id" },
       })
       .populate("payment", "amount paymentMethod transactionId paidAt status")
       .sort({ createdAt: -1 });
@@ -437,6 +475,7 @@ exports.getMyRegistrations = asyncHandler(async (req, res) => {
     .populate({
       path: "team",
       select: "name members leader teamCode",
+      populate: { path: "leader", select: "_id" },
     })
     .populate("payment", "amount paymentMethod transactionId paidAt status")
     .sort({ createdAt: -1 })

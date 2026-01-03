@@ -648,11 +648,17 @@ export default function EventDetailPage() {
   const isBeforeDeadline = new Date(event.registrationDeadline) > new Date();
   const registrationsClosed = !event.registrationsOpen || !isBeforeDeadline;
 
+  // CRITICAL: Prevent registration for ongoing/completed/cancelled events
+  const isEventLocked = ["ongoing", "completed", "cancelled"].includes(
+    event.status
+  );
+
   const canRegister =
     isStudent &&
     eventStatus.label === "Upcoming" &&
     event.status === "published" &&
     !registrationsClosed &&
+    !isEventLocked &&
     !hasAlreadyRegistered &&
     (!event.maxParticipants || actualRegistrationCount < event.maxParticipants);
 
@@ -660,12 +666,13 @@ export default function EventDetailPage() {
     isStudent &&
     eventStatus.label === "Upcoming" &&
     event.status === "published" &&
-    !registrationsClosed;
+    !registrationsClosed &&
+    !isEventLocked;
 
-  // Always show button section if student and either can register OR already registered
+  // Always show button section if student and either can register OR already registered (and not cancelled event)
   const showButtonSection =
     isStudent &&
-    event.status === "published" &&
+    event.status !== "cancelled" &&
     (canShowRegisterButton || hasAlreadyRegistered);
 
   console.log("Button visibility debug:", {
@@ -1243,266 +1250,272 @@ export default function EventDetailPage() {
                 </div>
               </div>
             </CardContent>
-            {event.maxTeamSize && event.maxTeamSize > 1 && isStudent && (
-              <CardFooter className="flex-col gap-3 items-stretch">
-                <div className="p-3 rounded-lg border-2 border-blue-500/20 bg-blue-50 dark:bg-blue-950/20">
-                  <div className="flex items-start gap-2 text-blue-900 dark:text-blue-100">
-                    <Users className="h-5 w-5 mt-0.5" />
-                    <div>
-                      <p className="font-semibold">Team Event</p>
-                      <p className="text-sm mt-1">
-                        This event requires a team of {event.maxTeamSize}{" "}
-                        members.{" "}
-                        {registrationsClosed
-                          ? "Registrations are closed."
-                          : "Create or join a team to register."}
-                      </p>
+            {event.maxTeamSize &&
+              event.maxTeamSize > 1 &&
+              isStudent &&
+              !isEventLocked && (
+                <CardFooter className="flex-col gap-3 items-stretch">
+                  <div className="p-3 rounded-lg border-2 border-blue-500/20 bg-blue-50 dark:bg-blue-950/20">
+                    <div className="flex items-start gap-2 text-blue-900 dark:text-blue-100">
+                      <Users className="h-5 w-5 mt-0.5" />
+                      <div>
+                        <p className="font-semibold">Team Event</p>
+                        <p className="text-sm mt-1">
+                          This event requires a team of {event.maxTeamSize}{" "}
+                          members.{" "}
+                          {registrationsClosed
+                            ? "Registrations are closed."
+                            : "Create or join a team to register."}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Team Selection for Registration */}
-                {!hasAlreadyRegistered &&
-                  !registrationsClosed &&
-                  myTeamsForEvent.length > 0 && (
-                    <div className="space-y-2">
-                      <Label htmlFor="team-select">Select Your Team</Label>
-                      <Select
-                        value={selectedTeamId}
-                        onValueChange={setSelectedTeamId}
+                  {/* Team Selection for Registration */}
+                  {!hasAlreadyRegistered &&
+                    !registrationsClosed &&
+                    myTeamsForEvent.length > 0 && (
+                      <div className="space-y-2">
+                        <Label htmlFor="team-select">Select Your Team</Label>
+                        <Select
+                          value={selectedTeamId}
+                          onValueChange={setSelectedTeamId}
+                        >
+                          <SelectTrigger id="team-select">
+                            <SelectValue placeholder="Choose a team to register with" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {myTeamsForEvent.map((team: any) => (
+                              <SelectItem key={team._id} value={team._id}>
+                                {team.name} ({team.members?.length || 0}{" "}
+                                members)
+                                {team.status === "locked" && " - Locked ✓"}
+                                {team.status === "active" && " - Active"}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selectedTeamId &&
+                          (() => {
+                            const team = myTeamsForEvent.find(
+                              (t: any) => t._id === selectedTeamId
+                            );
+                            return (
+                              team?.status !== "locked" && (
+                                <p className="text-sm text-amber-600">
+                                  ⚠ Team must be locked by the leader before
+                                  registration
+                                </p>
+                              )
+                            );
+                          })()}
+                      </div>
+                    )}
+
+                  {/* Register Button for Team Events */}
+                  {!hasAlreadyRegistered &&
+                    !registrationsClosed &&
+                    myTeamsForEvent.length > 0 &&
+                    selectedTeamId && (
+                      <Button
+                        className="w-full min-h-11"
+                        onClick={handleRegister}
+                        disabled={
+                          createRegistration.isPending || paymentLoading
+                        }
                       >
-                        <SelectTrigger id="team-select">
-                          <SelectValue placeholder="Choose a team to register with" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {myTeamsForEvent.map((team: any) => (
-                            <SelectItem key={team._id} value={team._id}>
-                              {team.name} ({team.members?.length || 0} members)
-                              {team.status === "locked" && " - Locked ✓"}
-                              {team.status === "active" && " - Active"}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {selectedTeamId &&
-                        (() => {
-                          const team = myTeamsForEvent.find(
-                            (t: any) => t._id === selectedTeamId
-                          );
-                          return (
-                            team?.status !== "locked" && (
-                              <p className="text-sm text-amber-600">
-                                ⚠ Team must be locked by the leader before
-                                registration
-                              </p>
-                            )
-                          );
-                        })()}
+                        {paymentLoading
+                          ? "Processing Payment..."
+                          : createRegistration.isPending
+                          ? "Registering..."
+                          : event.isPaid
+                          ? `Register Team & Pay ${formatCurrency(
+                              event.amount,
+                              event.currency
+                            )}`
+                          : "Register Team"}
+                      </Button>
+                    )}
+
+                  {hasAlreadyRegistered && (
+                    <div className="w-full space-y-2">
+                      {myActiveRegistration?.paymentStatus === "pending" ? (
+                        <>
+                          <Button
+                            className="w-full min-h-11 bg-amber-600 hover:bg-amber-700"
+                            onClick={() => navigate("/registrations")}
+                          >
+                            ⚠ Payment Pending - Click to Pay
+                          </Button>
+                          <p className="text-xs text-center text-muted-foreground">
+                            Complete payment to confirm your registration
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            className="w-full min-h-11 bg-green-600 hover:bg-green-700"
+                            disabled
+                          >
+                            ✓ Already Registered
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={() => navigate("/registrations")}
+                          >
+                            View My Registrations
+                          </Button>
+                        </>
+                      )}
                     </div>
                   )}
 
-                {/* Register Button for Team Events */}
-                {!hasAlreadyRegistered &&
-                  !registrationsClosed &&
-                  myTeamsForEvent.length > 0 &&
-                  selectedTeamId && (
+                  {!registrationsClosed && !hasAlreadyRegistered && (
+                    <div className="flex gap-2">
+                      <Dialog
+                        open={createTeamDialogOpen}
+                        onOpenChange={setCreateTeamDialogOpen}
+                      >
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="flex-1">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Create Team
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Create Team</DialogTitle>
+                            <DialogDescription>
+                              Create a new team for this event. Share the invite
+                              code with your teammates.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="teamName">Team Name</Label>
+                              <Input
+                                id="teamName"
+                                placeholder="Enter team name"
+                                value={teamName}
+                                onChange={(e) => setTeamName(e.target.value)}
+                                onKeyPress={(e) =>
+                                  e.key === "Enter" && handleCreateTeam()
+                                }
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="teamDescription">
+                                Description (Optional)
+                              </Label>
+                              <Textarea
+                                id="teamDescription"
+                                placeholder="Enter team description"
+                                value={teamDescription}
+                                onChange={(e) =>
+                                  setTeamDescription(e.target.value)
+                                }
+                                rows={3}
+                              />
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setCreateTeamDialogOpen(false);
+                                setTeamName("");
+                                setTeamDescription("");
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              onClick={handleCreateTeam}
+                              disabled={createTeam.isPending}
+                            >
+                              {createTeam.isPending
+                                ? "Creating..."
+                                : "Create Team"}
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+
+                      <Dialog
+                        open={joinTeamDialogOpen}
+                        onOpenChange={setJoinTeamDialogOpen}
+                      >
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="flex-1 min-h-11 w-full sm:w-auto"
+                          >
+                            <UserPlus className="mr-2 h-4 w-4" />
+                            Join with Code
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Join Team</DialogTitle>
+                            <DialogDescription>
+                              Enter the invite code shared by your team leader.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="inviteCode">Invite Code</Label>
+                              <Input
+                                id="inviteCode"
+                                placeholder="Enter 6-character code"
+                                value={inviteCode}
+                                onChange={(e) =>
+                                  setInviteCode(e.target.value.toUpperCase())
+                                }
+                                onKeyPress={(e) =>
+                                  e.key === "Enter" && handleJoinTeam()
+                                }
+                                className="font-mono text-lg tracking-wider"
+                                maxLength={10}
+                                autoComplete="off"
+                              />
+                              <p className="text-sm text-muted-foreground">
+                                Ask your team leader for the invite code
+                              </p>
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setJoinTeamDialogOpen(false);
+                                setInviteCode("");
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              onClick={handleJoinTeam}
+                              disabled={joinTeam.isPending}
+                            >
+                              {joinTeam.isPending ? "Joining..." : "Join Team"}
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  )}
+                  {!registrationsClosed && (
                     <Button
+                      variant="outline"
+                      onClick={() => navigate("/teams")}
                       className="w-full min-h-11"
-                      onClick={handleRegister}
-                      disabled={createRegistration.isPending || paymentLoading}
                     >
-                      {paymentLoading
-                        ? "Processing Payment..."
-                        : createRegistration.isPending
-                        ? "Registering..."
-                        : event.isPaid
-                        ? `Register Team & Pay ${formatCurrency(
-                            event.amount,
-                            event.currency
-                          )}`
-                        : "Register Team"}
+                      View My Teams
                     </Button>
                   )}
-
-                {hasAlreadyRegistered && (
-                  <div className="w-full space-y-2">
-                    {myActiveRegistration?.paymentStatus === "pending" ? (
-                      <>
-                        <Button
-                          className="w-full min-h-11 bg-amber-600 hover:bg-amber-700"
-                          onClick={() => navigate("/registrations")}
-                        >
-                          ⚠ Payment Pending - Click to Pay
-                        </Button>
-                        <p className="text-xs text-center text-muted-foreground">
-                          Complete payment to confirm your registration
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <Button
-                          className="w-full min-h-11 bg-green-600 hover:bg-green-700"
-                          disabled
-                        >
-                          ✓ Already Registered
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={() => navigate("/registrations")}
-                        >
-                          View My Registrations
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {!registrationsClosed && !hasAlreadyRegistered && (
-                  <div className="flex gap-2">
-                    <Dialog
-                      open={createTeamDialogOpen}
-                      onOpenChange={setCreateTeamDialogOpen}
-                    >
-                      <DialogTrigger asChild>
-                        <Button variant="outline" className="flex-1">
-                          <Plus className="mr-2 h-4 w-4" />
-                          Create Team
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Create Team</DialogTitle>
-                          <DialogDescription>
-                            Create a new team for this event. Share the invite
-                            code with your teammates.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="teamName">Team Name</Label>
-                            <Input
-                              id="teamName"
-                              placeholder="Enter team name"
-                              value={teamName}
-                              onChange={(e) => setTeamName(e.target.value)}
-                              onKeyPress={(e) =>
-                                e.key === "Enter" && handleCreateTeam()
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="teamDescription">
-                              Description (Optional)
-                            </Label>
-                            <Textarea
-                              id="teamDescription"
-                              placeholder="Enter team description"
-                              value={teamDescription}
-                              onChange={(e) =>
-                                setTeamDescription(e.target.value)
-                              }
-                              rows={3}
-                            />
-                          </div>
-                        </div>
-                        <DialogFooter>
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              setCreateTeamDialogOpen(false);
-                              setTeamName("");
-                              setTeamDescription("");
-                            }}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            onClick={handleCreateTeam}
-                            disabled={createTeam.isPending}
-                          >
-                            {createTeam.isPending
-                              ? "Creating..."
-                              : "Create Team"}
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-
-                    <Dialog
-                      open={joinTeamDialogOpen}
-                      onOpenChange={setJoinTeamDialogOpen}
-                    >
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="flex-1 min-h-11 w-full sm:w-auto"
-                        >
-                          <UserPlus className="mr-2 h-4 w-4" />
-                          Join with Code
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Join Team</DialogTitle>
-                          <DialogDescription>
-                            Enter the invite code shared by your team leader.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="inviteCode">Invite Code</Label>
-                            <Input
-                              id="inviteCode"
-                              placeholder="Enter 6-character code"
-                              value={inviteCode}
-                              onChange={(e) =>
-                                setInviteCode(e.target.value.toUpperCase())
-                              }
-                              onKeyPress={(e) =>
-                                e.key === "Enter" && handleJoinTeam()
-                              }
-                              className="font-mono text-lg tracking-wider"
-                              maxLength={10}
-                              autoComplete="off"
-                            />
-                            <p className="text-sm text-muted-foreground">
-                              Ask your team leader for the invite code
-                            </p>
-                          </div>
-                        </div>
-                        <DialogFooter>
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              setJoinTeamDialogOpen(false);
-                              setInviteCode("");
-                            }}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            onClick={handleJoinTeam}
-                            disabled={joinTeam.isPending}
-                          >
-                            {joinTeam.isPending ? "Joining..." : "Join Team"}
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </div>
-                )}
-                {!registrationsClosed && (
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate("/teams")}
-                    className="w-full min-h-11"
-                  >
-                    View My Teams
-                  </Button>
-                )}
-              </CardFooter>
-            )}
+                </CardFooter>
+              )}
             {(!event.maxTeamSize || event.maxTeamSize === 1) &&
               showButtonSection && (
                 <CardFooter className="p-4 sm:p-6">

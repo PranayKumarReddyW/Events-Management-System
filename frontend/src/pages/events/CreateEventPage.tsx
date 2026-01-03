@@ -241,7 +241,8 @@ export default function CreateEventPage() {
         ? event.status
         : "draft";
 
-      form.reset({
+      // CRITICAL FIX: Use setValue instead of reset for better Select component compatibility
+      const formData = {
         title: event.title || "",
         description: event.description || "",
         rules: event.rules || "",
@@ -278,6 +279,11 @@ export default function CreateEventPage() {
         allowExternalStudents: Boolean(event.allowExternalStudents),
         visibility: event.visibility || "public",
         status: validStatus,
+      };
+
+      // Set all form values individually to ensure Select components update
+      Object.entries(formData).forEach(([key, value]) => {
+        form.setValue(key as any, value);
       });
 
       // Set image preview if event has an image
@@ -672,6 +678,7 @@ export default function CreateEventPage() {
                     <FormItem>
                       <FormLabel>Event Type</FormLabel>
                       <Select
+                        key={`eventType-${event?._id || "new"}-${field.value}`}
                         onValueChange={field.onChange}
                         value={field.value}
                         disabled={isEventLocked}
@@ -1178,7 +1185,11 @@ export default function CreateEventPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Event Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      key={`status-${event?._id || "new"}-${field.value}`}
+                      onValueChange={field.onChange}
+                      value={field.value}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select event status" />

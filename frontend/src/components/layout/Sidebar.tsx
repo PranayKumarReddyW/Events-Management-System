@@ -20,13 +20,7 @@ const navigation = [
     name: "Dashboard",
     href: "/dashboard",
     icon: Home,
-    roles: [
-      "student",
-      "department_organizer",
-      "faculty",
-      "admin",
-      "super_admin",
-    ],
+    roles: ["student", "department_organizer", "faculty"],
   },
   {
     name: "Events",
@@ -79,19 +73,6 @@ const navigation = [
     roles: ["department_organizer", "faculty"],
   },
   {
-    name: "Notifications",
-    href: "/notifications",
-    icon: Bell,
-    roles: [
-      "student",
-      "department_organizer",
-      "faculty",
-      "admin",
-      "super_admin",
-    ],
-  },
-  // Admin Section
-  {
     name: "Analytics",
     href: "/admin/analytics",
     icon: BarChart,
@@ -114,6 +95,18 @@ const navigation = [
     href: "/admin/approvals",
     icon: CheckSquare,
     roles: ["admin", "super_admin"],
+  },
+  {
+    name: "Notifications",
+    href: "/notifications",
+    icon: Bell,
+    roles: [
+      "student",
+      "department_organizer",
+      "faculty",
+      "admin",
+      "super_admin",
+    ],
   },
 ];
 

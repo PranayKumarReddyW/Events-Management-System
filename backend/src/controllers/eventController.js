@@ -225,7 +225,35 @@ exports.getAllEvents = async (req, res, next) => {
     // Basic filters that can be simple
     if (category) query.$and.push({ category });
     if (eventType && eventType !== "all") query.$and.push({ eventType });
-    if (status && status !== "all") query.$and.push({ status });
+
+    // Handle status filter - support both database status and time-based status
+    if (status && status !== "all") {
+      const now = new Date();
+
+      if (status === "upcoming") {
+        // Upcoming: startDateTime is in the future
+        query.$and.push({
+          startDateTime: { $gt: now },
+          status: { $ne: "cancelled" },
+        });
+      } else if (status === "ongoing") {
+        // Ongoing: current time is between start and end
+        query.$and.push({
+          startDateTime: { $lte: now },
+          endDateTime: { $gte: now },
+          status: { $ne: "cancelled" },
+        });
+      } else if (status === "completed") {
+        // Completed: endDateTime is in the past
+        query.$and.push({
+          endDateTime: { $lt: now },
+          status: { $ne: "cancelled" },
+        });
+      } else {
+        // Direct database status match (draft, published, cancelled, etc.)
+        query.$and.push({ status });
+      }
+    }
 
     // Support both 'mode' and 'eventMode' parameters
     const modeValue = mode || eventMode;
@@ -490,11 +518,59 @@ exports.updateEvent = async (req, res, next) => {
     }
 
     // CRITICAL: Check if event has already started - lock critical fields
-    const eventHasStarted = new Date() >= new Date(event.startDateTime);
-    const eventIsOngoing =
-      new Date() >= new Date(event.startDateTime) &&
-      new Date() <= new Date(event.endDateTime);
-    const eventHasEnded = new Date() > new Date(event.endDateTime);
+    const now = new Date();
+    const startDate = new Date(event.startDateTime);
+    const endDate = new Date(event.endDateTime);
+
+    const eventHasStarted = now >= startDate;
+    const eventIsOngoing = now >= startDate && now <= endDate;
+    const eventHasEnded = now > endDate;
+
+    // ✅ RULE 2: STATUS VALIDATION - Hard date validation
+    if (req.body.status) {
+      const newStatus = req.body.status;
+      const currentStatus = event.status;
+
+      // Prevent invalid status transitions based on dates
+      if (newStatus === "ongoing" && now < startDate) {
+        return next(
+          new AppError(
+            `Cannot set status to ONGOING before event start date (${startDate.toISOString()})`,
+            400
+          )
+        );
+      }
+
+      if (newStatus === "completed" && now < endDate) {
+        return next(
+          new AppError(
+            `Cannot set status to COMPLETED before event end date (${endDate.toISOString()})`,
+            400
+          )
+        );
+      }
+
+      // Prevent status regression
+      const statusHierarchy = {
+        draft: 1,
+        published: 2,
+        ongoing: 3,
+        completed: 4,
+        cancelled: 5, // Can jump to cancelled from any state
+      };
+
+      if (
+        newStatus !== "cancelled" &&
+        statusHierarchy[newStatus] < statusHierarchy[currentStatus]
+      ) {
+        return next(
+          new AppError(
+            `Cannot revert status from ${currentStatus.toUpperCase()} to ${newStatus.toUpperCase()}. Status can only progress forward.`,
+            400
+          )
+        );
+      }
+    }
 
     // Lock critical fields once event starts
     if (eventHasStarted) {
@@ -566,6 +642,50 @@ exports.updateEvent = async (req, res, next) => {
         return next(
           new AppError(
             `Cannot reduce participant limit to ${req.body.maxParticipants}. There are already ${confirmedCount} confirmed registrations.`,
+            400
+          )
+        );
+      }
+    }
+
+    // CRITICAL: Prevent changing event from TEAM to SOLO if teams exist
+    if (
+      req.body.maxTeamSize !== undefined &&
+      req.body.maxTeamSize <= 1 &&
+      (event.maxTeamSize || 1) > 1
+    ) {
+      const Team = require("../models/Team");
+      const teamCount = await Team.countDocuments({
+        event: event._id,
+        status: { $ne: "disbanded" },
+      });
+
+      if (teamCount > 0) {
+        return next(
+          new AppError(
+            `Cannot change this event to SOLO (maxTeamSize <= 1). There are ${teamCount} active teams. Disband all teams first.`,
+            400
+          )
+        );
+      }
+    }
+
+    // CRITICAL: Prevent changing event from SOLO to TEAM if individual registrations exist
+    if (
+      req.body.maxTeamSize !== undefined &&
+      req.body.maxTeamSize > 1 &&
+      (event.maxTeamSize || 1) <= 1
+    ) {
+      const individualRegCount = await EventRegistration.countDocuments({
+        event: event._id,
+        team: null,
+        status: { $in: ["confirmed", "pending"] },
+      });
+
+      if (individualRegCount > 0) {
+        return next(
+          new AppError(
+            `Cannot change this event to TEAM event (maxTeamSize > 1). There are ${individualRegCount} individual registrations. Cancel them first or keep as SOLO event.`,
             400
           )
         );

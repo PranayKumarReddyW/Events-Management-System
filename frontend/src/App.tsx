@@ -25,11 +25,15 @@ function App() {
       <BrowserRouter>
         <AppRoutes />
         <Toaster
-          position="top-right"
+          position="bottom-right"
           expand={true}
-          closeButton={false}
+          richColors
+          closeButton={true}
           toastOptions={{
-            duration: 3000,
+            duration: 4000,
+            style: {
+              zIndex: 9999,
+            },
           }}
         />
       </BrowserRouter>

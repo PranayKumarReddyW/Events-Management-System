@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import LoginPage from "@/pages/auth/LoginPage";
 import RegisterPage from "@/pages/auth/RegisterPage";
@@ -34,6 +34,17 @@ import EventAnalyticsPage from "@/pages/events/EventAnalyticsPage";
 import NotFoundPage from "@/pages/NotFoundPage";
 import UnauthorizedPage from "@/pages/UnauthorizedPage";
 import DebugRoundsPage from "@/pages/debug/DebugRoundsPage";
+
+// Smart redirect based on user role
+function DashboardRedirect() {
+  const { user } = useAuth();
+
+  if (user?.role === "admin" || user?.role === "super_admin") {
+    return <Navigate to="/admin/analytics" replace />;
+  }
+
+  return <Navigate to="/dashboard" replace />;
+}
 
 // Protected route wrapper
 function ProtectedRoute({
@@ -89,7 +100,7 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route index element={<DashboardRedirect />} />
         <Route path="dashboard" element={<DashboardPage />} />
 
         {/* Event routes */}
