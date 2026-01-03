@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useMyTeams } from "@/hooks/useTeams";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,12 @@ import { JoinTeamDialog } from "./JoinTeamDialog";
 
 export default function TeamsPage() {
   const [search, setSearch] = useState("");
-  const { data: teamsData, isLoading } = useMyTeams();
+  const { data: teamsData, isLoading, refetch } = useMyTeams();
+
+  // Refetch teams when component mounts to ensure fresh data
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
 
   return (
     <div className="space-y-6">

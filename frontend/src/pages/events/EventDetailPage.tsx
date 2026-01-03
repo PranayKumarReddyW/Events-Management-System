@@ -103,7 +103,7 @@ export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { data: eventResponse, isLoading, isError } = useEvent(id!);
+  const { data: eventResponse, isLoading, isError, refetch } = useEvent(id!);
   const createRegistration = useCreateRegistration();
   const publishEvent = usePublishEvent();
   const deleteEvent = useDeleteEvent();
@@ -253,8 +253,8 @@ export default function EventDetailPage() {
         return;
       }
 
-      // Refetch registrations to update UI state
-      await refetchMyRegistrations();
+      // Refetch registrations and event to update UI state
+      await Promise.all([refetchMyRegistrations(), refetch()]);
 
       // If event is paid, trigger payment immediately
       if (event?.isPaid && registration) {

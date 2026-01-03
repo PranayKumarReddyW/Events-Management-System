@@ -19,6 +19,7 @@ import { toast } from "sonner";
 
 export default function CertificatesPage() {
   const [search, setSearch] = useState("");
+  const [downloading, setDownloading] = useState<string | null>(null);
   const { data: certificatesResponse, isLoading } = useCertificates();
 
   const certificates = certificatesResponse?.data || [];
@@ -33,16 +34,20 @@ export default function CertificatesPage() {
       return;
     }
 
+    setDownloading(certificateId);
     try {
       await certificatesApi.downloadCertificate(
         certificateId,
         certificateNumber
       );
-      toast.success("Certificate download started");
+      toast.success("Certificate downloaded successfully");
     } catch (error: any) {
+      console.error("Certificate download error:", error);
       toast.error(
         error.response?.data?.message || "Failed to download certificate"
       );
+    } finally {
+      setDownloading(null);
     }
   };
 
@@ -147,9 +152,10 @@ export default function CertificatesPage() {
                   onClick={() =>
                     handleDownload(cert._id, cert.certificateNumber)
                   }
+                  disabled={downloading === cert._id}
                 >
                   <Download className="mr-2 h-4 w-4" />
-                  Download
+                  {downloading === cert._id ? "Downloading..." : "Download"}
                 </Button>
                 <Button
                   variant="outline"

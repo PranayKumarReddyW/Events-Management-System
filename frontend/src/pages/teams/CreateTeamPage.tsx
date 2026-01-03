@@ -155,16 +155,22 @@ export default function CreateTeamPage() {
                           <SelectItem value="loading" disabled>
                             Loading events...
                           </SelectItem>
-                        ) : eventsData?.data?.events.length === 0 ? (
+                        ) : eventsData?.data?.events.filter(
+                            (event: any) => (event.maxTeamSize || 1) > 1
+                          ).length === 0 ? (
                           <SelectItem value="no-events" disabled>
-                            No events available
+                            No team-based events available
                           </SelectItem>
                         ) : (
-                          eventsData?.data?.events.map((event: any) => (
-                            <SelectItem key={event._id} value={event._id}>
-                              {event.title}
-                            </SelectItem>
-                          ))
+                          eventsData?.data?.events
+                            .filter(
+                              (event: any) => (event.maxTeamSize || 1) > 1
+                            )
+                            .map((event: any) => (
+                              <SelectItem key={event._id} value={event._id}>
+                                {event.title}
+                              </SelectItem>
+                            ))
                         )}
                       </SelectContent>
                     </Select>
@@ -191,7 +197,9 @@ export default function CreateTeamPage() {
               disabled={
                 createTeam.isPending ||
                 eventsLoading ||
-                !eventsData?.data?.events?.length
+                !eventsData?.data?.events?.filter(
+                  (event: any) => (event.maxTeamSize || 1) > 1
+                ).length
               }
             >
               {createTeam.isPending && (

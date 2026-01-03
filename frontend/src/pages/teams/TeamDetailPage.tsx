@@ -62,7 +62,7 @@ export default function TeamDetailPage() {
   const [memberEmail, setMemberEmail] = useState("");
   const [copied, setCopied] = useState(false);
 
-  const team: Team | undefined = teamResponse?.data?.data;
+  const team: Team | undefined = teamResponse?.data?.data as Team | undefined;
   // Handle both populated and non-populated leader field
   const leaderId =
     typeof team?.leader === "string" ? team.leader : (team as any)?.leader?._id;
