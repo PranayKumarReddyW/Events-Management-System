@@ -78,7 +78,13 @@ export default function ResetPasswordPage() {
     setError(null);
 
     try {
+      console.log(
+        "Submitting reset password with token:",
+        token.substring(0, 10) + "..."
+      );
       const response = await authApi.resetPassword(token, data.password);
+
+      console.log("Reset password response:", response);
 
       if (response.success) {
         setIsSuccess(true);
@@ -91,6 +97,7 @@ export default function ResetPasswordPage() {
         throw new Error(response.message || "Failed to reset password");
       }
     } catch (err: any) {
+      console.error("Reset password error:", err);
       const errorMessage =
         err.response?.data?.message ||
         err.response?.data?.errors?.[0]?.message ||

@@ -42,7 +42,11 @@ exports.addRound = asyncHandler(async (req, res) => {
     throw new AppError("Not authorized to modify this event", 403);
   }
 
+  // CRITICAL: Auto-assign round number based on existing rounds
+  const nextRoundNumber = event.rounds.length + 1;
+
   const newRound = {
+    number: nextRoundNumber, // Auto-assign 1-based round number
     name,
     description,
     startDate,
@@ -258,24 +262,51 @@ exports.advanceParticipants = asyncHandler(async (req, res) => {
     throw new AppError("Not authorized to manage this event", 403);
   }
 
-  const currentRoundNum = parseInt(roundNumber) - 1;
-  const nextRound = parseInt(roundNumber);
+  const currentRoundNum = parseInt(roundNumber);
+  const nextRoundNum = currentRoundNum + 1;
 
-  // CRITICAL: Validate current round is COMPLETED before advancing
-  if (event.rounds && event.rounds.length > currentRoundNum) {
-    const currentRound = event.rounds[currentRoundNum];
-    if (currentRound && currentRound.status !== "completed") {
-      throw new AppError(
-        `Cannot advance participants. Current round "${currentRound.name}" must be marked as COMPLETED first. Current status: ${currentRound.status}`,
-        400
-      );
-    }
+  logger.info(
+    `[ADVANCE PARTICIPANTS] Advancing from round ${currentRoundNum} to round ${nextRoundNum}`
+  );
+  logger.info(
+    `[ADVANCE PARTICIPANTS] Available rounds:`,
+    event.rounds.map((r) => ({ number: r.number, name: r.name }))
+  );
+
+  // CRITICAL: Validate current round exists and is COMPLETED
+  const currentRound = event.rounds.find((r) => r.number === currentRoundNum);
+  if (!currentRound) {
+    logger.error(
+      `[ADVANCE PARTICIPANTS] Current round ${currentRoundNum} does not exist`
+    );
+    throw new AppError(
+      `Round ${currentRoundNum} does not exist. Available rounds: ${event.rounds
+        .map((r) => r.number)
+        .join(", ")}`,
+      400
+    );
+  }
+
+  if (currentRound.status !== "completed") {
+    logger.error(
+      `[ADVANCE PARTICIPANTS] Current round ${currentRoundNum} status is ${currentRound.status}, not completed`
+    );
+    throw new AppError(
+      `Cannot advance participants. Current round "${currentRound.name}" must be marked as COMPLETED first. Current status: ${currentRound.status}`,
+      400
+    );
   }
 
   // CRITICAL: Validate next round exists
-  if (!event.rounds || event.rounds.length < nextRound) {
+  const nextRound = event.rounds.find((r) => r.number === nextRoundNum);
+  if (!nextRound) {
+    logger.error(
+      `[ADVANCE PARTICIPANTS] Next round ${nextRoundNum} does not exist`
+    );
     throw new AppError(
-      `Round ${nextRound} does not exist for this event. Create the round first.`,
+      `Round ${nextRoundNum} does not exist. Available rounds: ${event.rounds
+        .map((r) => r.number)
+        .join(", ")}`,
       400
     );
   }
@@ -297,9 +328,9 @@ exports.advanceParticipants = asyncHandler(async (req, res) => {
             return null;
           }
 
-          registration.currentRound = nextRound;
-          if (!registration.advancedToRounds.includes(nextRound)) {
-            registration.advancedToRounds.push(nextRound);
+          registration.currentRound = nextRoundNum; // Use nextRoundNum (number), not nextRound (object)
+          if (!registration.advancedToRounds.includes(nextRoundNum)) {
+            registration.advancedToRounds.push(nextRoundNum);
           }
           await registration.save(sessionOpt);
 
@@ -320,7 +351,7 @@ exports.advanceParticipants = asyncHandler(async (req, res) => {
           eliminated: false,
         },
         {
-          $set: { round: nextRound },
+          $set: { round: nextRoundNum }, // Use nextRoundNum (number), not nextRound (object)
         },
         sessionOpt
       );
@@ -341,7 +372,7 @@ exports.advanceParticipants = asyncHandler(async (req, res) => {
     // Mark non-advanced participants as eliminated atomically
     await Promise.all(
       notAdvanced.map(async (registration) => {
-        registration.eliminatedInRound = currentRoundNum;
+        registration.eliminatedInRound = currentRoundNum; // Mark elimination with round number
         await registration.save(sessionOpt);
 
         // CRITICAL: If team event, mark team as eliminated
@@ -399,7 +430,7 @@ exports.advanceParticipants = asyncHandler(async (req, res) => {
         await Notification.create({
           recipients: [registration.user],
           title: "Round Results",
-          message: `Thank you for participating in ${event.title}. You did not advance to Round ${nextRound}.`,
+          message: `Thank you for participating in ${event.title}. You did not advance to Round ${nextRoundNum}.`,
           type: "event_update",
           relatedEvent: event._id,
           channels: ["in_app", "email"],
@@ -414,7 +445,7 @@ exports.advanceParticipants = asyncHandler(async (req, res) => {
   );
 
   // Update event's current round
-  event.currentRound = nextRound;
+  event.currentRound = nextRoundNum;
   await event.save();
 
   res.json({
@@ -422,9 +453,9 @@ exports.advanceParticipants = asyncHandler(async (req, res) => {
     data: {
       advancedCount: result.advancedCount,
       eliminatedCount: result.eliminatedCount,
-      currentRound: nextRound,
+      currentRound: nextRoundNum,
     },
-    message: `${result.advancedCount} participants advanced to Round ${nextRound}`,
+    message: `${result.advancedCount} participants advanced to Round ${nextRoundNum}`,
   });
 });
 
@@ -473,15 +504,18 @@ exports.getRoundParticipants = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Get round statistics
+ * @desc    Get round statistics (participant counts, elimination counts)
  * @route   GET /api/v1/events/:eventId/rounds/stats
  * @access  Private (Organizer+)
  */
 exports.getRoundStats = asyncHandler(async (req, res) => {
   const { eventId } = req.params;
 
+  logger.info(`[GET ROUND STATS] Fetching stats for event: ${eventId}`);
+
   const event = await Event.findById(eventId);
   if (!event) {
+    logger.error(`[GET ROUND STATS] Event not found: ${eventId}`);
     throw new AppError("Event not found", 404);
   }
 
@@ -491,46 +525,87 @@ exports.getRoundStats = asyncHandler(async (req, res) => {
     req.user.role !== "admin" &&
     req.user.role !== "super_admin"
   ) {
-    throw new AppError("Not authorized to view statistics", 403);
+    logger.error(
+      `[GET ROUND STATS] Unauthorized user ${req.user._id} trying to view stats for event ${eventId}`
+    );
+    throw new AppError("Not authorized to view event statistics", 403);
   }
 
-  const stats = [];
+  logger.info(
+    `[GET ROUND STATS] Event has ${event.rounds.length} rounds`,
+    event.rounds.map((r) => ({ number: r.number, name: r.name }))
+  );
 
-  // Initial registrations
-  const initialCount = await EventRegistration.countDocuments({
+  // Build stats from explicit rounds array
+  const stats = await Promise.all(
+    event.rounds.map(async (round) => {
+      const roundNumber = round.number; // Use explicit number (1-based)
+
+      logger.info(
+        `[GET ROUND STATS] Processing round ${roundNumber}: ${round.name}`
+      );
+
+      // Count participants in this round
+      const participantCount = await EventRegistration.countDocuments({
+        event: eventId,
+        currentRound: roundNumber,
+        eliminatedInRound: null,
+      });
+
+      // Count participants eliminated in this round
+      const eliminatedCount = await EventRegistration.countDocuments({
+        event: eventId,
+        eliminatedInRound: roundNumber,
+      });
+
+      logger.info(
+        `[GET ROUND STATS] Round ${roundNumber}: ${participantCount} participants, ${eliminatedCount} eliminated`
+      );
+
+      return {
+        roundNumber,
+        name: round.name,
+        description: round.description,
+        participantCount,
+        eliminatedCount,
+        status: round.status,
+        startDate: round.startDate,
+        endDate: round.endDate,
+      };
+    })
+  );
+
+  // Also include registration stats (Round 0)
+  const registrationCount = await EventRegistration.countDocuments({
     event: eventId,
     status: "confirmed",
+    currentRound: 0,
+    eliminatedInRound: null,
   });
 
-  stats.push({
-    round: 0,
-    name: "Initial Registrations",
-    participantCount: initialCount,
-  });
+  logger.info(
+    `[GET ROUND STATS] Registration (Round 0): ${registrationCount} participants`
+  );
 
-  // Get stats for each round
-  for (let i = 1; i <= event.currentRound; i++) {
-    const roundCount = await EventRegistration.countDocuments({
-      event: eventId,
-      currentRound: i,
-      eliminatedInRound: null,
-      status: "confirmed",
-    });
+  const allStats = [
+    {
+      roundNumber: 0,
+      name: "Registration",
+      participantCount: registrationCount,
+      eliminatedCount: 0,
+      status: "active",
+    },
+    ...stats,
+  ];
 
-    const roundInfo = event.rounds[i - 1];
-    stats.push({
-      round: i,
-      name: roundInfo?.name || `Round ${i}`,
-      participantCount: roundCount,
-    });
-  }
+  logger.info(
+    `[GET ROUND STATS] Returning ${allStats.length} round statistics`
+  );
 
   res.json({
     success: true,
-    data: {
-      currentRound: event.currentRound,
-      totalRounds: event.rounds.length,
-      stats,
-    },
+    data: allStats,
+    totalRounds: event.rounds.length,
+    currentRound: event.currentRound,
   });
 });

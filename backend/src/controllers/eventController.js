@@ -503,11 +503,17 @@ exports.updateEvent = async (req, res, next) => {
   try {
     const { id } = req.params;
 
+    console.log("[updateEvent] Request body:", req.body);
+    console.log("[updateEvent] Status field in request:", req.body.status);
+
     const event = await Event.findById(id);
 
     if (!event) {
       return next(new AppError("Event not found", 404));
     }
+
+    console.log("[updateEvent] Current event status:", event.status);
+    console.log("[updateEvent] New status being set:", req.body.status);
 
     // Check permissions
     if (
@@ -827,8 +833,15 @@ exports.updateEvent = async (req, res, next) => {
     // Update event fields manually to ensure proper validation context
     Object.assign(event, req.body);
 
+    console.log(
+      "[updateEvent] Event after Object.assign, status:",
+      event.status
+    );
+
     // Save the event (this triggers validators with proper context)
     await event.save();
+
+    console.log("[updateEvent] Event after save, status:", event.status);
 
     // Clear cache
     const redis = getRedisClient();

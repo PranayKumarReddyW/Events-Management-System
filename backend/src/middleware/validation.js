@@ -90,6 +90,14 @@ exports.schemas = {
     password: Joi.string().required(),
   }),
 
+  userForgotPassword: Joi.object({
+    email: Joi.string().email().required(),
+  }),
+
+  userResetPassword: Joi.object({
+    password: Joi.string().min(8).required(),
+  }),
+
   // Event schemas
   eventCreate: Joi.object({
     title: Joi.string().min(3).max(200).required(),

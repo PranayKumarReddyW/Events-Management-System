@@ -30,10 +30,15 @@ router.post(
 router.post(
   "/forgot-password",
   passwordResetLimiter,
+  validateSchema(schemas.userForgotPassword),
   authController.forgotPassword
 );
 
-router.post("/reset-password/:token", authController.resetPassword);
+router.post(
+  "/reset-password/:token",
+  validateSchema(schemas.userResetPassword),
+  authController.resetPassword
+);
 
 // Protected routes
 router.use(protect);

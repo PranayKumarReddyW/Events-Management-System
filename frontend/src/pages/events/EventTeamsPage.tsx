@@ -357,14 +357,12 @@ export default function EventTeamsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Rounds</SelectItem>
-            {Array.from(
-              { length: Math.max(teamsData?.currentRound || 0, 5) },
-              (_, i) => (
+            {teamsData?.totalRounds &&
+              Array.from({ length: teamsData.totalRounds }, (_, i) => (
                 <SelectItem key={i + 1} value={String(i + 1)}>
                   Round {i + 1}
                 </SelectItem>
-              )
-            )}
+              ))}
           </SelectContent>
         </Select>
 
@@ -438,25 +436,20 @@ export default function EventTeamsPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Teams & Members</CardTitle>
-            {isOrganizer && (
+            {isOrganizer && teamsData?.totalRounds && (
               <div className="flex gap-2">
-                {Array.from(
-                  { length: Math.max(teamsData?.currentRound || 0, 5) },
-                  (_, i) => (
-                    <Button
-                      key={i}
-                      size="sm"
-                      variant={
-                        teamsData?.currentRound === i + 1
-                          ? "default"
-                          : "outline"
-                      }
-                      onClick={() => handleUpdateCurrentRound(i + 1)}
-                    >
-                      Round {i + 1}
-                    </Button>
-                  )
-                )}
+                {Array.from({ length: teamsData.totalRounds }, (_, i) => (
+                  <Button
+                    key={i}
+                    size="sm"
+                    variant={
+                      teamsData?.currentRound === i + 1 ? "default" : "outline"
+                    }
+                    onClick={() => handleUpdateCurrentRound(i + 1)}
+                  >
+                    Round {i + 1}
+                  </Button>
+                ))}
               </div>
             )}
           </div>

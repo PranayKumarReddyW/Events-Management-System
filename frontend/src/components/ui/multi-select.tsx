@@ -16,6 +16,7 @@ interface MultiSelectProps {
   onChange: (values: string[]) => void;
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
 }
 
 export function MultiSelect({
@@ -24,6 +25,7 @@ export function MultiSelect({
   onChange,
   placeholder = "Select items...",
   className,
+  disabled = false,
 }: MultiSelectProps) {
   const [open, setOpen] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -46,7 +48,12 @@ export function MultiSelect({
 
   return (
     <Command className={cn("overflow-visible bg-transparent", className)}>
-      <div className="group border border-input px-3 py-3 sm:py-2.5 text-sm ring-offset-background rounded-md focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+      <div
+        className={cn(
+          "group border border-input px-3 py-3 sm:py-2.5 text-sm ring-offset-background rounded-md focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+          disabled && "bg-muted opacity-50 cursor-not-allowed"
+        )}
+      >
         <div className="flex gap-1.5 sm:gap-1 flex-wrap">
           {selected.map((value) => {
             const option = options.find((o) => o.value === value);
@@ -58,9 +65,13 @@ export function MultiSelect({
               >
                 {option?.label || value}
                 <button
-                  className="ml-1.5 sm:ml-1 ring-offset-background rounded-full outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 inline-flex items-center justify-center p-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:p-0"
+                  className={cn(
+                    "ml-1.5 sm:ml-1 ring-offset-background rounded-full outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 inline-flex items-center justify-center p-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:p-0",
+                    disabled && "opacity-50 cursor-not-allowed"
+                  )}
+                  disabled={disabled}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && !disabled) {
                       handleUnselect(value);
                     }
                   }}
@@ -68,7 +79,11 @@ export function MultiSelect({
                     e.preventDefault();
                     e.stopPropagation();
                   }}
-                  onClick={() => handleUnselect(value)}
+                  onClick={() => {
+                    if (!disabled) {
+                      handleUnselect(value);
+                    }
+                  }}
                   aria-label={`Remove ${option?.label || value}`}
                 >
                   <X className="h-4 w-4 sm:h-3 sm:w-3 text-muted-foreground hover:text-foreground" />
@@ -78,11 +93,19 @@ export function MultiSelect({
           })}
           <CommandPrimitive.Input
             ref={inputRef}
+            disabled={disabled}
             value=""
             onBlur={() => setOpen(false)}
-            onFocus={() => setOpen(true)}
+            onFocus={() => {
+              if (!disabled) {
+                setOpen(true);
+              }
+            }}
             placeholder={selected.length === 0 ? placeholder : undefined}
-            className="ml-0 sm:ml-2 bg-transparent outline-none placeholder:text-muted-foreground flex-1 min-w-[120px] py-1.5 sm:py-0"
+            className={cn(
+              "ml-0 sm:ml-2 bg-transparent outline-none placeholder:text-muted-foreground flex-1 min-w-[120px] py-1.5 sm:py-0",
+              disabled && "opacity-50 cursor-not-allowed"
+            )}
           />
         </div>
       </div>

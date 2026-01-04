@@ -300,13 +300,25 @@ export default function CreateEventPage() {
 
   const onSubmit = async (data: EventFormValues) => {
     try {
-      // Prevent editing if event has started
-      if (isEventLocked) {
-        toast.error(
-          "Cannot modify event details after event has started. Only participant management is allowed."
-        );
-        return;
-      }
+      // Define locked fields that cannot be updated after event starts
+      const lockedFields = [
+        "title",
+        "eventType",
+        "startDateTime",
+        "endDateTime",
+        "minTeamSize",
+        "maxTeamSize",
+        "isPaid",
+        "registrationFee",
+        "eligibility",
+        "eligibleYears",
+        "eligibleDepartments",
+        "allowExternalStudents",
+        "requiresApproval",
+      ];
+
+      // Filter out locked fields if event has already started
+      const shouldFilterLockedFields = isEventLocked && isEditMode;
 
       // Validate required fields
       if (!data.eventType || data.eventType.trim() === "") {
@@ -344,22 +356,10 @@ export default function CreateEventPage() {
       }
 
       // Transform data to match API requirements
-      const eventData: any = {
-        title: data.title,
-        description: data.description,
-        eventType: data.eventType.trim(),
-        eventMode: data.eventMode,
-        startDateTime: new Date(data.startDate).toISOString(),
-        endDateTime: new Date(data.endDate).toISOString(),
-        registrationDeadline: new Date(data.registrationDeadline).toISOString(),
-        minTeamSize: minTeamSize,
-        maxTeamSize: maxTeamSize,
-        isPaid: Boolean(data.isPaid),
-        requiresApproval: Boolean(data.requiresApproval),
-        visibility: data.visibility,
-      };
+      const eventData: any = {};
 
-      // Add optional fields only if they have values
+      // Always add editable fields
+      eventData.description = data.description;
       if (data.rules) {
         eventData.rules = data.rules;
       }
@@ -375,15 +375,42 @@ export default function CreateEventPage() {
       if (data.maxParticipants) {
         eventData.maxParticipants = parseInt(String(data.maxParticipants), 10);
       }
-      if (data.isPaid && data.registrationFee) {
-        eventData.amount = parseFloat(String(data.registrationFee));
+
+      // Only include locked fields if event has NOT started
+      if (!shouldFilterLockedFields) {
+        eventData.title = data.title;
+        eventData.eventType = data.eventType.trim();
+        eventData.eventMode = data.eventMode;
+        eventData.startDateTime = new Date(data.startDate).toISOString();
+        eventData.endDateTime = new Date(data.endDate).toISOString();
+        eventData.registrationDeadline = new Date(
+          data.registrationDeadline
+        ).toISOString();
+        eventData.minTeamSize = minTeamSize;
+        eventData.maxTeamSize = maxTeamSize;
+        eventData.isPaid = Boolean(data.isPaid);
+        eventData.visibility = data.visibility;
+        eventData.requiresApproval = Boolean(data.requiresApproval);
+
+        // Add mandatory eligibility fields (only when not locked)
+        eventData.eligibility = data.eligibility;
+        eventData.eligibleYears = data.eligibleYears;
+        eventData.eligibleDepartments = data.eligibleDepartments;
+        eventData.allowExternalStudents = Boolean(data.allowExternalStudents);
+
+        if (data.isPaid && data.registrationFee) {
+          eventData.amount = parseFloat(String(data.registrationFee));
+        }
+      } else {
+        // When event has started, only update registration deadline if provided
+        eventData.registrationDeadline = new Date(
+          data.registrationDeadline
+        ).toISOString();
       }
 
-      // Add mandatory eligibility fields
-      eventData.eligibility = data.eligibility;
-      eventData.eligibleYears = data.eligibleYears;
-      eventData.eligibleDepartments = data.eligibleDepartments;
-      eventData.allowExternalStudents = Boolean(data.allowExternalStudents);
+      // CRITICAL FIX: Include status field in API request
+      // This was missing, causing status updates to be ignored
+      eventData.status = data.status;
 
       // Only include meetingLink for online/hybrid events
       if (data.eventMode === "online" || data.eventMode === "hybrid") {
@@ -391,6 +418,15 @@ export default function CreateEventPage() {
           eventData.meetingLink = data.meetingLink;
         }
       }
+
+      // DEBUG: Log the event data before sending to API
+      console.log("[CreateEventPage] Event data being sent to API:", eventData);
+      console.log(
+        "[CreateEventPage] Status value:",
+        eventData.status,
+        "Type:",
+        typeof eventData.status
+      );
 
       // Append all event data to FormData
       Object.keys(eventData).forEach((key) => {
@@ -461,7 +497,7 @@ export default function CreateEventPage() {
           </div>
           <p className="text-sm sm:text-base text-muted-foreground">
             {isEventLocked
-              ? "Event has started. Only participant management is allowed."
+              ? "You can still update: Description, Rules, Agenda, Venue, Meeting Link, Images, Registration Status"
               : isEditMode
               ? "Update your event details"
               : "Fill in the details to create a new event"}
@@ -1044,6 +1080,7 @@ export default function CreateEventPage() {
                     <FormLabel>Eligible Years *</FormLabel>
                     <FormControl>
                       <MultiSelect
+                        disabled={isEventLocked}
                         options={ACADEMIC_YEARS.map((year) => ({
                           label: year.label,
                           value: year.value,
@@ -1071,6 +1108,7 @@ export default function CreateEventPage() {
                     <FormLabel>Eligible Departments *</FormLabel>
                     <FormControl>
                       <MultiSelect
+                        disabled={isEventLocked}
                         options={DEPARTMENTS.map((dept) => ({
                           label: dept.label,
                           value: dept.value,
@@ -1103,6 +1141,7 @@ export default function CreateEventPage() {
                     </div>
                     <FormControl>
                       <Switch
+                        disabled={isEventLocked}
                         checked={field.value}
                         onCheckedChange={field.onChange}
                       />
@@ -1124,6 +1163,7 @@ export default function CreateEventPage() {
                     </div>
                     <FormControl>
                       <Switch
+                        disabled={isEventLocked}
                         checked={field.value}
                         onCheckedChange={field.onChange}
                       />
@@ -1141,6 +1181,7 @@ export default function CreateEventPage() {
                       <FormLabel>Registration Fee (₹)</FormLabel>
                       <FormControl>
                         <Input
+                          disabled={isEventLocked}
                           type="number"
                           min="0"
                           step="0.01"
@@ -1171,6 +1212,7 @@ export default function CreateEventPage() {
                     </div>
                     <FormControl>
                       <Switch
+                        disabled={isEventLocked}
                         checked={field.value}
                         onCheckedChange={field.onChange}
                       />
@@ -1235,19 +1277,13 @@ export default function CreateEventPage() {
             </Button>
             <Button
               type="submit"
-              disabled={
-                createEvent.isPending || updateEvent.isPending || isEventLocked
-              }
+              disabled={createEvent.isPending || updateEvent.isPending}
               className="w-full sm:w-auto min-h-[44px]"
             >
               {(createEvent.isPending || updateEvent.isPending) && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              {isEditMode
-                ? isEventLocked
-                  ? "Event Started - Locked"
-                  : "Update Event"
-                : "Create Event"}
+              {isEditMode ? "Update Event" : "Create Event"}
             </Button>
           </div>
         </form>

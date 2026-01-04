@@ -205,6 +205,10 @@ const eventSchema = new mongoose.Schema(
     ],
     rounds: [
       {
+        number: {
+          type: Number,
+          required: true, // 1-based: 1, 2, 3, etc.
+        },
         name: {
           type: String,
           required: true,

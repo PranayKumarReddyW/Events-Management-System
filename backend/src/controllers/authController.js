@@ -279,23 +279,31 @@ exports.forgotPassword = async (req, res, next) => {
     await user.save();
 
     // Send reset email
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+    const resetUrl = `${process.env.FRONTEND_URL}/auth/reset-password/${resetToken}`;
 
-    if (process.env.ENABLE_EMAIL_NOTIFICATIONS === "true") {
-      await sendEmail({
-        to: user.email,
-        subject: "Password Reset Request",
-        template: "reset-password",
-        data: {
-          name: user.fullName,
-          resetUrl,
-        },
-      });
+    try {
+      if (process.env.ENABLE_EMAIL_NOTIFICATIONS === "true") {
+        await sendEmail({
+          to: user.email,
+          subject: "Password Reset Request",
+          template: "reset-password",
+          data: {
+            name: user.fullName,
+            resetUrl,
+          },
+        });
+        logger.info(`Password reset email sent to ${user.email}`);
+      } else {
+        logger.warn("Email notifications disabled. Reset token: " + resetToken);
+      }
+    } catch (emailError) {
+      logger.error(`Failed to send reset email to ${user.email}:`, emailError);
+      // Don't fail the request, token is still saved
     }
 
     res.status(200).json({
       success: true,
-      message: "Password reset link sent to email",
+      message: "If the email exists, a password reset link has been sent",
     });
   } catch (error) {
     next(error);
@@ -308,7 +316,17 @@ exports.resetPassword = async (req, res, next) => {
     const { token } = req.params;
     const { password } = req.body;
 
+    if (!token || !password) {
+      return next(new AppError("Token and password are required", 400));
+    }
+
     const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    logger.debug(
+      `Attempting password reset with token: ${token.substring(0, 10)}...`
+    );
+    logger.debug(`Hashed token: ${hashedToken}`);
+    logger.debug(`Current time: ${new Date().toISOString()}`);
 
     const user = await User.findOne({
       resetPasswordToken: hashedToken,
@@ -316,7 +334,32 @@ exports.resetPassword = async (req, res, next) => {
     });
 
     if (!user) {
-      return next(new AppError("Invalid or expired reset token", 400));
+      // Debug: check if token exists at all (even if expired)
+      const userWithToken = await User.findOne({
+        resetPasswordToken: hashedToken,
+      });
+
+      if (userWithToken) {
+        logger.warn(
+          `Token found but expired. Expiry: ${
+            userWithToken.resetPasswordExpiry
+          }, Now: ${new Date()}`
+        );
+        return next(
+          new AppError(
+            "Password reset link has expired. Please request a new one.",
+            400
+          )
+        );
+      }
+
+      logger.warn(`No user found with hashed token: ${hashedToken}`);
+      return next(
+        new AppError(
+          "Invalid reset token. The link may have expired or is incorrect.",
+          400
+        )
+      );
     }
 
     // Update password

@@ -79,12 +79,18 @@ const generateEmailFromTemplate = (template, data) => {
       <a href="${process.env.FRONTEND_URL}/events">Browse Events</a>
     `,
     "reset-password": `
-      <h1>Password Reset Request</h1>
-      <p>Hi ${data.name},</p>
-      <p>You requested to reset your password. Click the link below to proceed:</p>
-      <a href="${data.resetUrl}">Reset Password</a>
-      <p>This link will expire in 1 hour.</p>
-      <p>If you didn't request this, please ignore this email.</p>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h1 style="color: #333; text-align: center;">Password Reset Request</h1>
+        <p style="color: #666; line-height: 1.6;">Hi ${data.name},</p>
+        <p style="color: #666; line-height: 1.6;">You requested to reset your password. Click the button below to proceed:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${data.resetUrl}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Reset Password</a>
+        </div>
+        <p style="color: #666; line-height: 1.6;">Or copy and paste this link in your browser:</p>
+        <p style="color: #007bff; word-break: break-all; background-color: #f5f5f5; padding: 10px; border-radius: 3px;">${data.resetUrl}</p>
+        <p style="color: #999; font-size: 12px; margin-top: 20px;">This link will expire in 1 hour.</p>
+        <p style="color: #999; font-size: 12px;">If you didn't request this, please ignore this email and do not share this link with anyone.</p>
+      </div>
     `,
     "registration-confirmation": `
       <h1>Event Registration Confirmed!</h1>
