@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const eventController = require("../controllers/eventController");
 const strictRoundController = require("../controllers/strictRoundController");
+const roundController = require("../controllers/roundController");
 const resultController = require("../controllers/resultController");
 const registrationController = require("../controllers/registrationController");
 const analyticsController = require("../controllers/analyticsController");
