@@ -1,4 +1,4 @@
-const { AppError } = require("../middleware/errorHandler");
+const { AppError } = require("../middleware/strictErrorHandler");
 const logger = require("./logger");
 
 /**
@@ -57,7 +57,7 @@ function validateWithSchema(data, schema) {
       data,
     });
 
-    throw new AppError("Validation failed", 422, { errors: formattedErrors });
+    throw new AppError("Validation failed", 422, formattedErrors);
   }
 
   return value;

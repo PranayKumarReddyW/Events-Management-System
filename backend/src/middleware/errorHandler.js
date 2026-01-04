@@ -23,11 +23,11 @@ exports.errorHandler = (err, req, res, next) => {
 
   // Mongoose validation error
   if (err.name === "ValidationError") {
-    const errors = Object.values(err.errors).map((e) => ({
-      field: e.path,
-      message: e.message,
-    }));
-    return res.status(400).json({
+    const errors = {};
+    Object.keys(err.errors).forEach((field) => {
+      errors[field] = err.errors[field].message;
+    });
+    return res.status(422).json({
       success: false,
       message: "Validation failed",
       errors,
@@ -67,6 +67,8 @@ exports.errorHandler = (err, req, res, next) => {
   res.status(error.statusCode || 500).json({
     success: false,
     message: error.message || "Internal server error",
+    ...(error.details &&
+      Object.keys(error.details).length > 0 && { errors: error.details }),
     ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
   });
 };
@@ -86,9 +88,10 @@ exports.asyncHandler = (fn) => (req, res, next) => {
 
 // Custom error class
 class AppError extends Error {
-  constructor(message, statusCode) {
+  constructor(message, statusCode, details = null) {
     super(message);
     this.statusCode = statusCode;
+    this.details = details; // Field-level error details
     this.isOperational = true;
 
     Error.captureStackTrace(this, this.constructor);

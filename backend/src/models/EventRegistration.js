@@ -149,11 +149,12 @@ eventRegistrationSchema.index(
 eventRegistrationSchema.pre("save", async function (next) {
   if (this.isNew && !this.registrationNumber) {
     const year = new Date().getFullYear();
-    const count = await this.constructor.countDocuments();
-    this.registrationNumber = `REG-${year}-${String(count + 1).padStart(
-      6,
-      "0"
-    )}`;
+    // Generate unique registration number using timestamp + random suffix
+    const timestamp = Date.now().toString().slice(-6);
+    const random = Math.floor(Math.random() * 10000)
+      .toString()
+      .padStart(4, "0");
+    this.registrationNumber = `REG-${year}-${timestamp}${random}`;
   }
   next();
 });

@@ -201,23 +201,56 @@ async function lockTeam({ token, teamId }) {
 }
 
 async function registerForEvent({ token, eventId, teamId }) {
-  const res = await request("post", "/registrations", {
-    token,
-    data: {
-      eventId,
-      ...(teamId ? { teamId } : {}),
-      participantInfo: {
-        tshirtSize: "M",
-        college: "Mock University",
+  try {
+    const res = await request("post", "/registrations", {
+      token,
+      data: {
+        eventId,
+        ...(teamId ? { teamId } : {}),
+        participantInfo: {
+          tshirtSize: "M",
+          college: "Mock University",
+        },
+        emergencyContact: {
+          name: "Mock Guardian",
+          phone: "9999999999",
+          relationship: "parent",
+        },
       },
-      emergencyContact: {
-        name: "Mock Guardian",
-        phone: "9999999999",
-        relationship: "parent",
-      },
-    },
-  });
-  return unwrap(res); // registration doc
+    });
+    return unwrap(res); // registration doc
+  } catch (e) {
+    // If user is already registered for this event, return their existing registration
+    if (
+      e?.response?.status === 400 &&
+      e?.response?.data?.message?.includes("already registered")
+    ) {
+      console.log(
+        `[seed] ℹ️  User already registered for this event, skipping...`
+      );
+      // Try to fetch the existing registration
+      const regRes = await request("get", `/registrations?eventId=${eventId}`, {
+        token,
+      });
+      const registrations = unwrap(regRes);
+      if (
+        registrations &&
+        Array.isArray(registrations) &&
+        registrations.length > 0
+      ) {
+        return registrations[0];
+      }
+      if (
+        registrations &&
+        registrations.registrations &&
+        registrations.registrations.length > 0
+      ) {
+        return registrations.registrations[0];
+      }
+      return null;
+    }
+    throw e;
+  }
 }
 
 async function submitFeedback({ token, eventId, comment }) {

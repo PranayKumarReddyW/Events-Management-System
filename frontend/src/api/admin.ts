@@ -35,6 +35,7 @@ export interface AdminDashboardResponse {
 export interface UsersFilters {
   role?: string;
   department?: string;
+  yearOfStudy?: number;
   isActive?: boolean;
   search?: string;
   page?: number;
@@ -152,6 +153,9 @@ export interface ReportResponse {
 export const adminApi = {
   // Get admin dashboard
   getDashboard: async () => {
+    // Backend: { success: true, data: { overview, distributions, recent } }
+    // apiClient.get returns that directly
+    // So callers get: analyticsResponse.data.overview
     return apiClient.get<AdminDashboardResponse>("/admin/dashboard");
   },
 

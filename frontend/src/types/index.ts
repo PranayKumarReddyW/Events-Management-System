@@ -172,7 +172,7 @@ export interface Event {
     startDate?: string;
     endDate?: string;
     maxParticipants?: number;
-    status: "upcoming" | "active" | "completed";
+    status: "upcoming" | "ongoing" | "completed";
   }>;
   currentRound?: number;
 }

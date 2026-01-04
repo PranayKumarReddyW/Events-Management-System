@@ -63,6 +63,7 @@ import {
   UserX,
   MoreVertical,
 } from "lucide-react";
+import { ACADEMIC_YEARS, DEPARTMENTS } from "@/constants";
 import type { EventRegistration, Event } from "@/types";
 
 export default function ParticipantsPage() {
@@ -83,6 +84,8 @@ export default function ParticipantsPage() {
     status: "all",
     paymentStatus: "all",
     search: "",
+    department: "all",
+    yearOfStudy: "all" as string | number,
     page: 1,
     limit: 100,
   });
@@ -132,6 +135,12 @@ export default function ParticipantsPage() {
                 ? undefined
                 : filters.paymentStatus,
             search: filters.search,
+            department:
+              filters.department === "all" ? undefined : filters.department,
+            yearOfStudy:
+              filters.yearOfStudy === "all"
+                ? undefined
+                : Number(filters.yearOfStudy),
             page: filters.page,
             limit: filters.limit,
           }
@@ -163,6 +172,8 @@ export default function ParticipantsPage() {
     filters.status,
     filters.paymentStatus,
     filters.search,
+    filters.department,
+    filters.yearOfStudy,
     filters.page,
     filters.limit,
   ]);
@@ -456,7 +467,7 @@ export default function ParticipantsPage() {
         <CardContent>
           {/* Filters */}
           {selectedRound === 0 && (
-            <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            <div className="flex flex-col gap-4 mb-6">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -468,41 +479,82 @@ export default function ParticipantsPage() {
                   className="pl-10"
                 />
               </div>
-              <Select
-                value={filters.status}
-                onValueChange={(value) =>
-                  setFilters({ ...filters, status: value, page: 1 })
-                }
-              >
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="confirmed">Confirmed</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="waitlisted">Waitlisted</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={filters.paymentStatus}
-                onValueChange={(value) =>
-                  setFilters({ ...filters, paymentStatus: value, page: 1 })
-                }
-              >
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Payment" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Payments</SelectItem>
-                  <SelectItem value="paid">Paid</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="failed">Failed</SelectItem>
-                  <SelectItem value="not_required">Free</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Select
+                  value={filters.status}
+                  onValueChange={(value) =>
+                    setFilters({ ...filters, status: value, page: 1 })
+                  }
+                >
+                  <SelectTrigger className="w-full sm:w-[160px]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="confirmed">Confirmed</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="waitlisted">Waitlisted</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={filters.paymentStatus}
+                  onValueChange={(value) =>
+                    setFilters({ ...filters, paymentStatus: value, page: 1 })
+                  }
+                >
+                  <SelectTrigger className="w-full sm:w-[160px]">
+                    <SelectValue placeholder="Payment" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Payments</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                    <SelectItem value="not_required">Free</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={filters.department}
+                  onValueChange={(value) =>
+                    setFilters({ ...filters, department: value, page: 1 })
+                  }
+                >
+                  <SelectTrigger className="w-full sm:w-[220px]">
+                    <SelectValue placeholder="Department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Departments</SelectItem>
+                    {DEPARTMENTS.map((dept) => (
+                      <SelectItem key={dept.value} value={dept.value}>
+                        {dept.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={String(filters.yearOfStudy)}
+                  onValueChange={(value) =>
+                    setFilters({ ...filters, yearOfStudy: value, page: 1 })
+                  }
+                >
+                  <SelectTrigger className="w-full sm:w-[160px]">
+                    <SelectValue placeholder="Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Years</SelectItem>
+                    {ACADEMIC_YEARS.map((year) => (
+                      <SelectItem key={year.value} value={year.value}>
+                        {year.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           )}
 

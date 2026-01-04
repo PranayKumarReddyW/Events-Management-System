@@ -291,7 +291,10 @@ exports.registerForEvent = asyncHandler(async (req, res) => {
 
   // Populate fields after transaction
   await registration.populate([
-    { path: "event", select: "title startDateTime eventType venue" },
+    {
+      path: "event",
+      select: "title startDateTime eventType venue isPaid amount",
+    },
     { path: "user", select: "fullName email phone" },
     { path: "team", select: "name members" },
   ]);
@@ -300,16 +303,20 @@ exports.registerForEvent = asyncHandler(async (req, res) => {
   try {
     await sendEmail({
       to: req.user.email,
-      subject: `Registration Confirmation - ${event.title}`,
+      subject: `Registration Confirmation - ${registration.event.title}`,
       template: "registration-confirmation",
       context: {
+        name: req.user.fullName,
         userName: req.user.fullName,
-        eventTitle: event.title,
-        eventDate: event.startDateTime,
-        eventVenue: event.venue || "Online",
+        eventName: registration.event.title,
+        eventTitle: registration.event.title,
+        date: registration.event.startDateTime,
+        time: new Date(registration.event.startDateTime).toLocaleTimeString(),
+        venue: registration.event.venue || "Online",
+        eventVenue: registration.event.venue || "Online",
         registrationNumber: registration.registrationNumber,
-        needsPayment: event.isPaid,
-        amount: event.amount,
+        needsPayment: registration.event.isPaid,
+        amount: registration.event.amount,
       },
     });
   } catch (error) {
@@ -319,9 +326,9 @@ exports.registerForEvent = asyncHandler(async (req, res) => {
   // Send SMS notification
   if (req.user.phone) {
     try {
-      const smsMessage = event.isPaid
-        ? `Registration initiated for ${event.title}. Please complete payment to confirm. Registration #: ${registration.registrationNumber}`
-        : `Registration successful for ${event.title}. Registration #: ${registration.registrationNumber}`;
+      const smsMessage = registration.event.isPaid
+        ? `Registration initiated for ${registration.event.title}. Please complete payment to confirm. Registration #: ${registration.registrationNumber}`
+        : `Registration successful for ${registration.event.title}. Registration #: ${registration.registrationNumber}`;
 
       await sendSMS({
         to: req.user.phone,
@@ -534,7 +541,15 @@ exports.getRegistrationById = asyncHandler(async (req, res) => {
  */
 exports.getEventRegistrations = asyncHandler(async (req, res) => {
   const { eventId } = req.params;
-  const { status, paymentStatus, search, page = 1, limit = 20 } = req.query;
+  const {
+    status,
+    paymentStatus,
+    search,
+    department,
+    yearOfStudy,
+    page = 1,
+    limit = 20,
+  } = req.query;
 
   // Check if user has access to this event
   const event = await Event.findById(eventId);
@@ -562,15 +577,26 @@ exports.getEventRegistrations = asyncHandler(async (req, res) => {
 
   let query = EventRegistration.find(filter);
 
-  // Search by user name or email
-  if (search) {
-    const users = await User.find({
-      $or: [
+  // Optional filters based on user properties (department, yearOfStudy, search)
+  if (search || department || yearOfStudy) {
+    const userFilter = {};
+
+    if (search) {
+      userFilter.$or = [
         { fullName: { $regex: search, $options: "i" } },
         { email: { $regex: search, $options: "i" } },
-      ],
-    }).select("_id");
+      ];
+    }
 
+    if (department) {
+      userFilter.department = department;
+    }
+
+    if (yearOfStudy) {
+      userFilter.yearOfStudy = parseInt(yearOfStudy);
+    }
+
+    const users = await User.find(userFilter).select("_id");
     const userIds = users.map((u) => u._id);
     query = query.where("user").in(userIds);
   }

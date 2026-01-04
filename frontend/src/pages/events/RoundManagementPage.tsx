@@ -61,7 +61,11 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { formatDate } from "@/utils/date";
+import {
+  formatDate,
+  toDatetimeLocalString,
+  fromDatetimeLocalString,
+} from "@/utils/date";
 import type { Event, EventRegistration } from "@/types";
 
 interface Round {
@@ -71,7 +75,7 @@ interface Round {
   startDate?: string;
   endDate?: string;
   maxParticipants?: number;
-  status: "upcoming" | "active" | "completed";
+  status: "upcoming" | "ongoing" | "completed";
 }
 
 interface RoundStats {
@@ -112,7 +116,7 @@ export default function RoundManagementPage() {
     startDate: string;
     endDate: string;
     maxParticipants: string;
-    status?: "upcoming" | "active" | "completed";
+    status?: "upcoming" | "ongoing" | "completed";
   }>({
     name: "",
     description: "",
@@ -236,7 +240,7 @@ export default function RoundManagementPage() {
       }
     }
 
-    // Validate against previous round dates
+    // Validate against previous round dates (no requirement for completion)
     if (rounds.length > 0 && roundForm.startDate) {
       const lastRound = rounds[rounds.length - 1];
       if (lastRound.endDate) {
@@ -248,25 +252,20 @@ export default function RoundManagementPage() {
           return;
         }
       }
-
-      // Check if previous round is completed
-      if (lastRound.status !== "completed") {
-        toast.error(
-          "Previous round must be completed before adding a new round"
-        );
-        return;
-      }
     }
 
     const roundData = {
-      name: roundForm.name,
+      roundName: roundForm.name,
       description: roundForm.description,
-      startDate: roundForm.startDate || undefined,
-      endDate: roundForm.endDate || undefined,
-      maxParticipants: roundForm.maxParticipants
+      roundStartDate: roundForm.startDate
+        ? fromDatetimeLocalString(roundForm.startDate)
+        : undefined,
+      roundEndDate: roundForm.endDate
+        ? fromDatetimeLocalString(roundForm.endDate)
+        : undefined,
+      roundMaxParticipants: roundForm.maxParticipants
         ? parseInt(roundForm.maxParticipants)
         : undefined,
-      status: "upcoming",
     };
 
     try {
@@ -289,7 +288,16 @@ export default function RoundManagementPage() {
 
       await loadEventData();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to add round");
+      // Handle field-level validation errors
+      const errorData = error.response?.data;
+      if (errorData?.errors && typeof errorData.errors === "object") {
+        const errorMessages = Object.entries(errorData.errors)
+          .map(([field, message]) => `${message}`)
+          .join(" • ");
+        toast.error(errorMessages);
+      } else {
+        toast.error(errorData?.message || "Failed to add round");
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -314,9 +322,9 @@ export default function RoundManagementPage() {
     }
 
     // Check if trying to activate a round when another is already active
-    if (roundForm.status === "active") {
+    if (roundForm.status === "ongoing") {
       const hasActiveRound = rounds.some(
-        (r) => r.status === "active" && r._id !== editingRound._id
+        (r) => r.status === "ongoing" && r._id !== editingRound._id
       );
       if (hasActiveRound) {
         toast.error(
@@ -331,8 +339,12 @@ export default function RoundManagementPage() {
       await eventsApi.updateRound(eventId, editingRound._id, {
         name: roundForm.name,
         description: roundForm.description,
-        startDate: roundForm.startDate || undefined,
-        endDate: roundForm.endDate || undefined,
+        startDate: roundForm.startDate
+          ? fromDatetimeLocalString(roundForm.startDate)
+          : undefined,
+        endDate: roundForm.endDate
+          ? fromDatetimeLocalString(roundForm.endDate)
+          : undefined,
         maxParticipants: roundForm.maxParticipants
           ? parseInt(roundForm.maxParticipants)
           : undefined,
@@ -351,7 +363,16 @@ export default function RoundManagementPage() {
       });
       await loadEventData();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to update round");
+      // Handle field-level validation errors
+      const errorData = error.response?.data;
+      if (errorData?.errors && typeof errorData.errors === "object") {
+        const errorMessages = Object.entries(errorData.errors)
+          .map(([field, message]) => `${message}`)
+          .join(" • ");
+        toast.error(errorMessages);
+      } else {
+        toast.error(errorData?.message || "Failed to update round");
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -368,7 +389,16 @@ export default function RoundManagementPage() {
       setEditingRound(null);
       await loadEventData();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to delete round");
+      // Handle field-level validation errors
+      const errorData = error.response?.data;
+      if (errorData?.errors && typeof errorData.errors === "object") {
+        const errorMessages = Object.entries(errorData.errors)
+          .map(([field, message]) => `${message}`)
+          .join(" • ");
+        toast.error(errorMessages);
+      } else {
+        toast.error(errorData?.message || "Failed to delete round");
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -430,12 +460,8 @@ export default function RoundManagementPage() {
     setRoundForm({
       name: round.name,
       description: round.description || "",
-      startDate: round.startDate
-        ? new Date(round.startDate).toISOString().slice(0, 16)
-        : "",
-      endDate: round.endDate
-        ? new Date(round.endDate).toISOString().slice(0, 16)
-        : "",
+      startDate: toDatetimeLocalString(round.startDate),
+      endDate: toDatetimeLocalString(round.endDate),
       maxParticipants: round.maxParticipants?.toString() || "",
     });
     setShowEditRoundDialog(true);
@@ -503,6 +529,17 @@ export default function RoundManagementPage() {
     roundStats.find((s) => s.round === 0)?.participantCount || 0;
   const currentRoundParticipants =
     roundStats.find((s) => s.round === currentRound)?.participantCount || 0;
+  const lastRound = rounds.length > 0 ? rounds[rounds.length - 1] : null;
+  const editingRoundIndex =
+    editingRound && rounds.length > 0
+      ? rounds.findIndex((r) =>
+          editingRound._id
+            ? r._id === editingRound._id
+            : r.name === editingRound.name
+        )
+      : -1;
+  const previousEditingRound =
+    editingRoundIndex > 0 ? rounds[editingRoundIndex - 1] : null;
 
   return (
     <div className="space-y-6">
@@ -514,7 +551,20 @@ export default function RoundManagementPage() {
           </h1>
           <p className="text-muted-foreground mt-1">{event.title}</p>
         </div>
-        <Button onClick={() => setShowAddRoundDialog(true)}>
+        <Button
+          onClick={() => {
+            // Reset form state when opening Add Round so it doesn't reuse edit values
+            setEditingRound(null);
+            setRoundForm({
+              name: "",
+              description: "",
+              startDate: "",
+              endDate: "",
+              maxParticipants: "",
+            });
+            setShowAddRoundDialog(true);
+          }}
+        >
           <Plus className="mr-2 h-4 w-4" />
           Add Round
         </Button>
@@ -603,6 +653,8 @@ export default function RoundManagementPage() {
           ) : (
             <div className="space-y-3">
               {rounds.map((round, index) => (
+                // Determine if this round can be safely deleted from UI
+                // Only the last UPCOMING round is deletable (backend also enforces this)
                 <div
                   key={round._id || index}
                   className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent"
@@ -629,7 +681,7 @@ export default function RoundManagementPage() {
                   <div className="flex items-center gap-2">
                     <Badge
                       variant={
-                        round.status === "active"
+                        round.status === "ongoing"
                           ? "default"
                           : round.status === "completed"
                           ? "secondary"
@@ -645,13 +697,29 @@ export default function RoundManagementPage() {
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openDeleteDialog(round)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {(() => {
+                      const isLastRound = index === rounds.length - 1;
+                      const canDelete =
+                        isLastRound && round.status === "upcoming";
+                      return (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => canDelete && openDeleteDialog(round)}
+                          disabled={!canDelete}
+                          aria-disabled={!canDelete}
+                          title={
+                            !canDelete
+                              ? isLastRound
+                                ? "Only upcoming rounds can be deleted"
+                                : "You must delete later rounds before deleting this round"
+                              : undefined
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}
@@ -800,13 +868,63 @@ export default function RoundManagementPage() {
 
       {/* Add Round Dialog */}
       <Dialog open={showAddRoundDialog} onOpenChange={setShowAddRoundDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add New Round</DialogTitle>
             <DialogDescription>
               Create a new round for this event
             </DialogDescription>
           </DialogHeader>
+          {event && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2">
+              <p className="text-xs font-semibold text-blue-900 mb-2">
+                📅 Event Timeline
+              </p>
+              <div className="grid grid-cols-2 gap-3 text-xs text-blue-800">
+                <div>
+                  <p className="font-medium">Starts:</p>
+                  <p>
+                    {event.startDateTime
+                      ? formatDate(event.startDateTime, "MMM dd, yyyy, hh:mm a")
+                      : "Not set"}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium">Ends:</p>
+                  <p>
+                    {event.endDateTime
+                      ? formatDate(event.endDateTime, "MMM dd, yyyy, hh:mm a")
+                      : "Not set"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          {event && lastRound && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-2">
+              <p className="text-xs font-semibold text-amber-900 mb-2">
+                ⏱ Previous Round ({lastRound.name || `Round ${rounds.length}`}):
+              </p>
+              <div className="grid grid-cols-2 gap-3 text-xs text-amber-800">
+                <div>
+                  <p className="font-medium">Starts:</p>
+                  <p>
+                    {lastRound.startDate
+                      ? formatDate(lastRound.startDate, "MMM dd, yyyy, hh:mm a")
+                      : "Not set"}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium">Ends:</p>
+                  <p>
+                    {lastRound.endDate
+                      ? formatDate(lastRound.endDate, "MMM dd, yyyy, hh:mm a")
+                      : "Not set"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium">Round Name *</label>
@@ -830,7 +948,7 @@ export default function RoundManagementPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">Start Date</label>
+                <label className="text-sm font-medium">Start Date *</label>
                 <Input
                   type="datetime-local"
                   value={roundForm.startDate}
@@ -838,9 +956,35 @@ export default function RoundManagementPage() {
                     setRoundForm({ ...roundForm, startDate: e.target.value })
                   }
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {event?.startDateTime && event?.endDateTime
+                    ? lastRound
+                      ? `Must be between ${formatDate(
+                          event.startDateTime,
+                          "MMM dd, yyyy, hh:mm a"
+                        )} and ${formatDate(
+                          event.endDateTime,
+                          "MMM dd, yyyy, hh:mm a"
+                        )}, and after previous round ends at ${
+                          lastRound.endDate
+                            ? formatDate(
+                                lastRound.endDate,
+                                "MMM dd, yyyy, hh:mm a"
+                              )
+                            : "previous round end time"
+                        }`
+                      : `Must be between ${formatDate(
+                          event.startDateTime,
+                          "MMM dd, yyyy, hh:mm a"
+                        )} and ${formatDate(
+                          event.endDateTime,
+                          "MMM dd, yyyy, hh:mm a"
+                        )}`
+                    : "Must be within event timeline"}
+                </p>
               </div>
               <div>
-                <label className="text-sm font-medium">End Date</label>
+                <label className="text-sm font-medium">End Date *</label>
                 <Input
                   type="datetime-local"
                   value={roundForm.endDate}
@@ -848,6 +992,17 @@ export default function RoundManagementPage() {
                     setRoundForm({ ...roundForm, endDate: e.target.value })
                   }
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {event?.startDateTime && event?.endDateTime
+                    ? `Must be between ${formatDate(
+                        event.startDateTime,
+                        "MMM dd, yyyy, hh:mm a"
+                      )} and ${formatDate(
+                        event.endDateTime,
+                        "MMM dd, yyyy, hh:mm a"
+                      )}, and after the round start time`
+                    : "Must be within event timeline"}
+                </p>
               </div>
             </div>
             <div>
@@ -889,6 +1044,63 @@ export default function RoundManagementPage() {
             <DialogTitle>Edit Round</DialogTitle>
             <DialogDescription>Update round details</DialogDescription>
           </DialogHeader>
+          {event && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2">
+              <p className="text-xs font-semibold text-blue-900 mb-2">
+                📅 Event Timeline
+              </p>
+              <div className="grid grid-cols-2 gap-3 text-xs text-blue-800">
+                <div>
+                  <p className="font-medium">Starts:</p>
+                  <p>
+                    {event.startDateTime
+                      ? formatDate(event.startDateTime, "MMM dd, yyyy, hh:mm a")
+                      : "Not set"}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium">Ends:</p>
+                  <p>
+                    {event.endDateTime
+                      ? formatDate(event.endDateTime, "MMM dd, yyyy, hh:mm a")
+                      : "Not set"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          {event && previousEditingRound && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-2">
+              <p className="text-xs font-semibold text-amber-900 mb-2">
+                ⏱ Previous Round (
+                {previousEditingRound.name || `Round ${editingRoundIndex}`}):
+              </p>
+              <div className="grid grid-cols-2 gap-3 text-xs text-amber-800">
+                <div>
+                  <p className="font-medium">Starts:</p>
+                  <p>
+                    {previousEditingRound.startDate
+                      ? formatDate(
+                          previousEditingRound.startDate,
+                          "MMM dd, yyyy, hh:mm a"
+                        )
+                      : "Not set"}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium">Ends:</p>
+                  <p>
+                    {previousEditingRound.endDate
+                      ? formatDate(
+                          previousEditingRound.endDate,
+                          "MMM dd, yyyy, hh:mm a"
+                        )
+                      : "Not set"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium">Round Name *</label>
@@ -913,7 +1125,7 @@ export default function RoundManagementPage() {
               <Select
                 value={(roundForm as any).status || editingRound?.status}
                 onValueChange={(value) =>
-                  setRoundForm({ ...roundForm, status: value } as any)
+                  setRoundForm({ ...roundForm, status: value as any })
                 }
               >
                 <SelectTrigger>
@@ -921,14 +1133,14 @@ export default function RoundManagementPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="upcoming">Upcoming</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="ongoing">Ongoing</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">Start Date</label>
+                <label className="text-sm font-medium">Start Date *</label>
                 <Input
                   type="datetime-local"
                   value={roundForm.startDate}
@@ -936,9 +1148,35 @@ export default function RoundManagementPage() {
                     setRoundForm({ ...roundForm, startDate: e.target.value })
                   }
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {event?.startDateTime && event?.endDateTime
+                    ? previousEditingRound
+                      ? `Must be between ${formatDate(
+                          event.startDateTime,
+                          "MMM dd, yyyy, hh:mm a"
+                        )} and ${formatDate(
+                          event.endDateTime,
+                          "MMM dd, yyyy, hh:mm a"
+                        )}, and after previous round ends at ${
+                          previousEditingRound.endDate
+                            ? formatDate(
+                                previousEditingRound.endDate,
+                                "MMM dd, yyyy, hh:mm a"
+                              )
+                            : "previous round end time"
+                        }`
+                      : `Must be between ${formatDate(
+                          event.startDateTime,
+                          "MMM dd, yyyy, hh:mm a"
+                        )} and ${formatDate(
+                          event.endDateTime,
+                          "MMM dd, yyyy, hh:mm a"
+                        )}`
+                    : "Must be within event timeline"}
+                </p>
               </div>
               <div>
-                <label className="text-sm font-medium">End Date</label>
+                <label className="text-sm font-medium">End Date *</label>
                 <Input
                   type="datetime-local"
                   value={roundForm.endDate}
@@ -946,6 +1184,17 @@ export default function RoundManagementPage() {
                     setRoundForm({ ...roundForm, endDate: e.target.value })
                   }
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {event?.startDateTime && event?.endDateTime
+                    ? `Must be between ${formatDate(
+                        event.startDateTime,
+                        "MMM dd, yyyy, hh:mm a"
+                      )} and ${formatDate(
+                        event.endDateTime,
+                        "MMM dd, yyyy, hh:mm a"
+                      )}, and after the round start time`
+                    : "Must be within event timeline"}
+                </p>
               </div>
             </div>
             <div>

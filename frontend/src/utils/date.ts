@@ -173,3 +173,47 @@ export function getEventStatus(
 
   return { label: "Completed", variant: "outline" };
 }
+
+/**
+ * Convert ISO date string to datetime-local format (for input type="datetime-local")
+ * Handles timezone correctly by working with the local time representation
+ */
+export function toDatetimeLocalString(
+  dateStr: string | null | undefined
+): string {
+  if (!dateStr) return "";
+  try {
+    const date = new Date(dateStr);
+    if (!isValid(date)) return "";
+
+    // Create a date string in local timezone without Z
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Convert datetime-local format to ISO string for API.
+ * Interprets the input as LOCAL time and relies on Date/ISO
+ * conversion so that when we read it back and render in local
+ * time again, the clock time stays the same for the user.
+ */
+export function fromDatetimeLocalString(datetimeLocalStr: string): string {
+  if (!datetimeLocalStr) return "";
+  try {
+    // Example input: "2026-10-10T10:00" (local time)
+    // new Date() will treat this as local and convert to UTC internally.
+    const date = new Date(datetimeLocalStr);
+    if (!isValid(date)) return "";
+    return date.toISOString();
+  } catch {
+    return "";
+  }
+}

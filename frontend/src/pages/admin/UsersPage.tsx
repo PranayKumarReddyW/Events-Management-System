@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "@/api";
-import { QUERY_KEYS } from "@/constants";
+import { QUERY_KEYS, ACADEMIC_YEARS, DEPARTMENTS } from "@/constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -63,13 +63,27 @@ export default function UsersPage() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [yearFilter, setYearFilter] = useState("all");
   const [editingUser, setEditingUser] = useState<any>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   const { data: usersResponse, isLoading } = useQuery({
-    queryKey: [QUERY_KEYS.ADMIN_USERS, roleFilter],
-    queryFn: () =>
-      adminApi.getAllUsers(roleFilter === "all" ? {} : { role: roleFilter }),
+    queryKey: [
+      QUERY_KEYS.ADMIN_USERS,
+      roleFilter,
+      departmentFilter,
+      yearFilter,
+    ],
+    queryFn: () => {
+      const filters: Record<string, any> = {};
+
+      if (roleFilter !== "all") filters.role = roleFilter;
+      if (departmentFilter !== "all") filters.department = departmentFilter;
+      if (yearFilter !== "all") filters.yearOfStudy = Number(yearFilter);
+
+      return adminApi.getAllUsers(Object.keys(filters).length ? filters : {});
+    },
   });
 
   const updateUserMutation = useMutation({
@@ -153,23 +167,56 @@ export default function UsersPage() {
                 className="pl-10"
               />
             </div>
-            <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="Filter by role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Roles</SelectItem>
-                <SelectItem value="student">Student</SelectItem>
-                <SelectItem value="department_organizer">
-                  Department Organizer
-                </SelectItem>
-                <SelectItem value="faculty">Faculty</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-                {isSuperAdmin && (
-                  <SelectItem value="super_admin">Super Admin</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="Filter by role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  <SelectItem value="student">Student</SelectItem>
+                  <SelectItem value="department_organizer">
+                    Department Organizer
+                  </SelectItem>
+                  <SelectItem value="faculty">Faculty</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  {isSuperAdmin && (
+                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={departmentFilter}
+                onValueChange={setDepartmentFilter}
+              >
+                <SelectTrigger className="w-full sm:w-56">
+                  <SelectValue placeholder="Filter by department" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {DEPARTMENTS.map((dept) => (
+                    <SelectItem key={dept.value} value={dept.value}>
+                      {dept.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={yearFilter} onValueChange={setYearFilter}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="Filter by year" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Years</SelectItem>
+                  {ACADEMIC_YEARS.map((year) => (
+                    <SelectItem key={year.value} value={year.value}>
+                      {year.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {isLoading ? (

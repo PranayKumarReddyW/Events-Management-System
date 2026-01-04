@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-require("dotenv").config();
 
 // Import all models
 const User = require("../models/User");
@@ -13,13 +12,14 @@ const Notification = require("../models/Notification");
 const Announcement = require("../models/Announcement");
 const Session = require("../models/Session");
 const AuditLog = require("../models/AuditLog");
+require("dotenv").config();
 
 /**
  * Clear all collections in the database
  */
 async function clearDatabase() {
   try {
-    console.log("🗑️  Starting database cleanup...");
+    console.log("🗑️  Starting database cleanup...", process.env);
 
     // Connect to database
     await mongoose.connect(process.env.MONGODB_URI, {

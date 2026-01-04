@@ -12,15 +12,54 @@ const { withTransaction } = require("../utils/transaction");
  * @desc    Add round to event
  * @route   POST /api/v1/events/:eventId/rounds
  * @access  Private (Organizer+)
+ * REQUIREMENTS:
+ * - roundName is REQUIRED
+ * - roundStartDate is REQUIRED
+ * - roundEndDate is REQUIRED
+ * - NO auto-assignment of dates, NO silent defaults
+ * - Strict validation with event boundaries and sequencing
  */
 exports.addRound = asyncHandler(async (req, res) => {
   const { eventId } = req.params;
-  const { name, description, startDate, endDate, maxParticipants } = req.body;
+  const {
+    name,
+    roundName,
+    description,
+    roundDescription,
+    startDate,
+    roundStartDate,
+    endDate,
+    roundEndDate,
+    maxParticipants,
+    roundMaxParticipants,
+  } = req.body;
 
   logger.info(`[ADD ROUND] Request to add round to event ${eventId}`);
   logger.info(`[ADD ROUND] Request body:`, req.body);
   logger.info(`[ADD ROUND] User:`, req.user._id, req.user.role);
 
+  // STEP 1: Validate required fields (STRICT - no auto-assignment)
+  const finalName = roundName || name;
+  const finalStartDate = roundStartDate || startDate;
+  const finalEndDate = roundEndDate || endDate;
+
+  const errors = {};
+  if (!finalName || finalName.trim().length === 0) {
+    errors.roundName = "Round name is required";
+  }
+  if (!finalStartDate) {
+    errors.roundStartDate = "Round start date is required";
+  }
+  if (!finalEndDate) {
+    errors.roundEndDate = "Round end date is required";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    logger.warn(`[ADD ROUND] Missing required fields`, { errors });
+    throw new AppError("Missing required fields", 400, errors);
+  }
+
+  // STEP 2: Find event
   const event = await Event.findById(eventId);
   if (!event) {
     logger.error(`[ADD ROUND] Event not found: ${eventId}`);
@@ -30,7 +69,7 @@ exports.addRound = asyncHandler(async (req, res) => {
   logger.info(`[ADD ROUND] Found event: ${event.title}`);
   logger.info(`[ADD ROUND] Current rounds count: ${event.rounds.length}`);
 
-  // Check if user is organizer
+  // STEP 3: Check authorization
   if (
     event.organizerId.toString() !== req.user._id.toString() &&
     req.user.role !== "admin" &&
@@ -42,16 +81,95 @@ exports.addRound = asyncHandler(async (req, res) => {
     throw new AppError("Not authorized to modify this event", 403);
   }
 
-  // CRITICAL: Auto-assign round number based on existing rounds
+  // STEP 4: Validate dates (STRICT)
+  const eventStart = new Date(event.startDateTime);
+  const eventEnd = new Date(event.endDateTime);
+  const roundStart = new Date(finalStartDate);
+  const roundEnd = new Date(finalEndDate);
+
+  const validationErrors = {};
+
+  // Validate date formats
+  if (isNaN(roundStart.getTime())) {
+    validationErrors.roundStartDate =
+      "Round start date must be a valid ISO date";
+  }
+  if (isNaN(roundEnd.getTime())) {
+    validationErrors.roundEndDate = "Round end date must be a valid ISO date";
+  }
+
+  if (Object.keys(validationErrors).length > 0) {
+    logger.warn(`[ADD ROUND] Invalid date format`, validationErrors);
+    throw new AppError("Invalid date format", 400, validationErrors);
+  }
+
+  // Check event boundaries
+  if (roundStart < eventStart) {
+    validationErrors.roundStartDate = `Round start time cannot be before the event start time. Event runs from ${eventStart.toISOString()} to ${eventEnd.toISOString()}`;
+  }
+
+  if (roundEnd > eventEnd) {
+    validationErrors.roundEndDate = `Round end time cannot exceed the event end time. Event ends at ${eventEnd.toISOString()}`;
+  }
+
+  // Check round end is after round start
+  if (roundEnd <= roundStart) {
+    validationErrors.roundEndDate =
+      "Round end time must be after round start time";
+  }
+
+  if (Object.keys(validationErrors).length > 0) {
+    logger.warn(`[ADD ROUND] Date validation failed`, validationErrors);
+    throw new AppError("Date validation failed", 400, validationErrors);
+  }
+
+  // STEP 5: Check sequential rules
+  if (event.rounds.length > 0) {
+    const previousRound = event.rounds[event.rounds.length - 1];
+    const prevRoundEnd = new Date(previousRound.endDate);
+
+    if (roundStart <= prevRoundEnd) {
+      validationErrors.roundStartDate = `Round ${
+        event.rounds.length + 1
+      } must start after Round ${
+        event.rounds.length
+      } ends at ${prevRoundEnd.toISOString()}`;
+      logger.warn(`[ADD ROUND] Sequential rule violation`, validationErrors);
+      throw new AppError("Invalid round timing", 400, validationErrors);
+    }
+  }
+
+  // STEP 6: Check for overlapping rounds
+  const overlappingRound = event.rounds.find((r) => {
+    const rStart = new Date(r.startDate);
+    const rEnd = new Date(r.endDate);
+    return roundStart < rEnd && roundEnd > rStart;
+  });
+
+  if (overlappingRound) {
+    validationErrors.roundStartDate =
+      "This round overlaps with an existing round. Please adjust the timing.";
+    logger.warn(`[ADD ROUND] Overlapping rounds detected`, {
+      eventId,
+      overlappingRound: overlappingRound.name,
+    });
+    throw new AppError(
+      "Round dates overlap with existing round",
+      400,
+      validationErrors
+    );
+  }
+
+  // STEP 7: Create round with auto-assigned number
   const nextRoundNumber = event.rounds.length + 1;
 
   const newRound = {
-    number: nextRoundNumber, // Auto-assign 1-based round number
-    name,
-    description,
-    startDate,
-    endDate,
-    maxParticipants,
+    number: nextRoundNumber,
+    name: finalName,
+    description: roundDescription || description || "",
+    startDate: roundStart,
+    endDate: roundEnd,
+    maxParticipants: roundMaxParticipants || maxParticipants,
     status: "upcoming",
   };
 
@@ -205,6 +323,8 @@ exports.updateRound = asyncHandler(async (req, res) => {
 exports.deleteRound = asyncHandler(async (req, res) => {
   const { eventId, roundId } = req.params;
 
+  logger.info(`[DELETE ROUND] Deleting round ${roundId} from event ${eventId}`);
+
   const event = await Event.findById(eventId);
   if (!event) {
     throw new AppError("Event not found", 404);
@@ -219,8 +339,70 @@ exports.deleteRound = asyncHandler(async (req, res) => {
     throw new AppError("Not authorized to modify this event", 403);
   }
 
-  event.rounds.pull(roundId);
+  // Find the round to delete
+  const round = event.rounds.id(roundId);
+  if (!round) {
+    throw new AppError("Round not found", 404);
+  }
+
+  const roundNumber = round.number;
+  logger.info(`[DELETE ROUND] Found round number: ${roundNumber}`, {
+    roundName: round.name,
+  });
+
+  // Prevent deletion of completed/ongoing rounds
+  if (round.status === "completed" || round.status === "ongoing") {
+    const errors = {
+      status: `Cannot delete ${round.status} round "${round.name}"`,
+    };
+    logger.warn(`[DELETE ROUND] Cannot delete locked round`, {
+      eventId,
+      roundId,
+      status: round.status,
+    });
+    throw new AppError("Cannot delete this round", 403, errors);
+  }
+
+  // STRICT RULE: Can ONLY delete the LAST (most recently created) round
+  const maxRoundNumber = Math.max(...event.rounds.map((r) => r.number || 0), 0);
+
+  if (roundNumber !== maxRoundNumber) {
+    const laterRounds = event.rounds.filter((r) => r.number > roundNumber);
+    const laterRoundNames = laterRounds.map((r) => r.name).join(", ");
+
+    const errors = {
+      roundNumber: `Cannot delete Round ${roundNumber} while later rounds exist. Please delete Round ${maxRoundNumber} ("${laterRoundNames}") first.`,
+    };
+    logger.warn(`[DELETE ROUND] Attempt to delete non-last round`, {
+      eventId,
+      roundNumber,
+      maxRoundNumber,
+      laterRounds: laterRoundNames,
+    });
+    throw new AppError("Cannot delete this round", 400, errors);
+  }
+
+  logger.info(
+    `[DELETE ROUND] Deletion validation passed - this is the last round`
+  );
+
+  // Remove the round
+  event.rounds.id(roundId).deleteOne();
+
+  // Re-number remaining rounds
+  event.rounds.forEach((r, index) => {
+    r.number = index + 1;
+  });
+
   await event.save();
+
+  logger.info(`[DELETE ROUND] Round deleted successfully`, {
+    eventId,
+    roundId,
+    roundNumber,
+    roundName: round.name,
+    remainingRounds: event.rounds.length,
+  });
 
   // Clear Redis cache for this event
   const redis = getRedisClient();
@@ -232,6 +414,7 @@ exports.deleteRound = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     message: "Round deleted successfully",
+    data: { event },
   });
 });
 

@@ -242,30 +242,52 @@ const updateEventSchema = Joi.object({
 
 /**
  * Round Creation - STRICT VALIDATION
- * Enforces date constraints and sequence logic
+ * Enforces ALL required fields + date constraints + sequencing rules
+ *
+ * RULES (PRODUCTION-GRADE):
+ * 1. roundName is ALWAYS REQUIRED
+ * 2. roundStartDate is REQUIRED (no auto-assignment, no defaults)
+ * 3. roundEndDate is REQUIRED (no auto-assignment, no defaults)
+ * 4. eventId is REQUIRED
+ * 5. If any required field is missing, throw EXACT error message
+ * 6. ALL business rules enforced at service layer:
+ *    - Event boundaries (round dates within event start/end)
+ *    - Sequential ordering (no overlaps, subsequent rounds after previous)
+ *    - Clear, context-aware error messages with event timing
  */
 const createRoundSchema = Joi.object({
-  name: Joi.string().trim().min(3).max(100).required().messages({
+  roundName: Joi.string().trim().min(3).max(100).required().messages({
     "string.empty": "Round name is required",
     "any.required": "Round name is required",
     "string.min": "Round name must be at least 3 characters",
     "string.max": "Round name cannot exceed 100 characters",
   }),
 
-  description: Joi.string().trim().max(2000).optional().allow(""),
+  roundDescription: Joi.string().trim().max(2000).optional().allow(""),
 
-  startDate: Joi.date().iso().required().messages({
-    "date.iso": "Start date must be in ISO format",
+  // CRITICAL: Dates are now REQUIRED (no defaults, no auto-assignment)
+  roundStartDate: Joi.date().iso().required().messages({
+    "date.iso": "Round start date must be in ISO format (YYYY-MM-DDTHH:mm:ss)",
+    "date.base": "Round start date must be a valid date",
     "any.required": "Round start date is required",
   }),
 
-  endDate: Joi.date().iso().required().min(Joi.ref("startDate")).messages({
-    "date.iso": "End date must be in ISO format",
-    "any.required": "Round end date is required",
-    "date.min": "Round end date must be after start date",
-  }),
+  roundEndDate: Joi.date()
+    .iso()
+    .required()
+    .min(Joi.ref("roundStartDate"))
+    .messages({
+      "date.iso": "Round end date must be in ISO format (YYYY-MM-DDTHH:mm:ss)",
+      "date.base": "Round end date must be a valid date",
+      "any.required": "Round end date is required",
+      "date.min": "Round end time must be after round start time",
+    }),
 
-  maxParticipants: Joi.number().integer().positive().optional().allow(null),
+  roundMaxParticipants: Joi.number()
+    .integer()
+    .positive()
+    .optional()
+    .allow(null),
 
   status: Joi.string()
     .valid("upcoming", "ongoing", "completed")
@@ -275,13 +297,31 @@ const createRoundSchema = Joi.object({
 /**
  * Round Update - STRICT VALIDATION
  * Prevents date changes that affect sequence
+ * Supports flexible field updates with backward compatibility
  */
 const updateRoundSchema = Joi.object({
+  // Support both naming conventions for compatibility
+  roundName: Joi.string().trim().min(3).max(100),
   name: Joi.string().trim().min(3).max(100),
+
+  roundDescription: Joi.string().trim().max(2000).allow(""),
   description: Joi.string().trim().max(2000).allow(""),
+
+  roundStartDate: Joi.date().iso(),
   startDate: Joi.date().iso(),
-  endDate: Joi.date().iso().min(Joi.ref("startDate")),
+
+  roundEndDate: Joi.date()
+    .iso()
+    .min(Joi.ref("roundStartDate"))
+    .min(Joi.ref("startDate")),
+  endDate: Joi.date()
+    .iso()
+    .min(Joi.ref("roundStartDate"))
+    .min(Joi.ref("startDate")),
+
+  roundMaxParticipants: Joi.number().integer().positive().allow(null),
   maxParticipants: Joi.number().integer().positive().allow(null),
+
   status: Joi.string().valid("upcoming", "ongoing", "completed"),
 }).unknown(true);
 

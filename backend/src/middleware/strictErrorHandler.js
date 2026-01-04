@@ -66,11 +66,23 @@ const errorHandler = (err, req, res, next) => {
   // Handle different error types
   if (err instanceof AppError && err.isOperational) {
     // Operational error - expected error
-    return res.status(err.statusCode).json({
+    const response = {
       success: false,
       message: err.message,
-      ...(err.details && { errors: err.details }),
+    };
+
+    // Add validation errors if present
+    if (err.details && Object.keys(err.details).length > 0) {
+      response.errors = err.details;
+    }
+
+    // Log response for debugging
+    logger.debug(`[ERROR RESPONSE]`, {
+      message: err.message,
+      errors: err.details,
     });
+
+    return res.status(err.statusCode).json(response);
   }
 
   // Handle Mongoose validation errors

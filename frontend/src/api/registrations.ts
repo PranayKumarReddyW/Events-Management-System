@@ -9,6 +9,8 @@ export interface RegistrationFilters {
   page?: number;
   limit?: number;
   search?: string;
+  department?: string;
+  yearOfStudy?: number;
 }
 
 export interface CreateRegistrationData {

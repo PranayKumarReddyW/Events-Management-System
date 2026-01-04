@@ -33,8 +33,8 @@ exports.getDashboard = asyncHandler(async (req, res) => {
     .limit(10);
 
   const recentEvents = await Event.find()
-    .select("title status startDateTime organizer")
-    .populate("organizer", "fullName")
+    .select("title status startDateTime organizerId")
+    .populate("organizerId", "fullName")
     .sort({ createdAt: -1 })
     .limit(10);
 
@@ -95,6 +95,7 @@ exports.getAllUsers = asyncHandler(async (req, res) => {
   const {
     role,
     department,
+    yearOfStudy,
     isActive,
     search,
     page = 1,
@@ -105,6 +106,7 @@ exports.getAllUsers = asyncHandler(async (req, res) => {
 
   if (role) filter.role = role;
   if (department) filter.department = department;
+  if (yearOfStudy) filter.yearOfStudy = parseInt(yearOfStudy);
   if (isActive !== undefined) filter.isActive = isActive === "true";
 
   if (search) {

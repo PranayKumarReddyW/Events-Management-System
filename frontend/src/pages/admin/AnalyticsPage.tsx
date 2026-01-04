@@ -20,7 +20,12 @@ import { formatCurrency } from "@/utils/helpers";
 
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState("30");
-  const { data: analyticsResponse, isLoading } = useAnalytics();
+  const { data: analyticsResponse, isLoading, error } = useAnalytics();
+
+  // Debug: log the response structure
+  console.log("Analytics Response:", analyticsResponse);
+  console.log("Analytics Data:", analyticsResponse?.data);
+  console.log("Overview:", analyticsResponse?.data?.overview);
 
   const analytics = analyticsResponse?.data?.overview;
 
