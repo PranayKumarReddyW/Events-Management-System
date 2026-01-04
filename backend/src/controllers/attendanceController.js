@@ -36,6 +36,30 @@ exports.checkIn = asyncHandler(async (req, res) => {
     throw new AppError("Not authorized to mark attendance", 403);
   }
 
+  // EDGE CASE: Check-in time window validation (30 min before to 1 hour after start)
+  const now = new Date();
+  const allowCheckInFrom = new Date(
+    event.startDateTime.getTime() - 30 * 60 * 1000
+  );
+  const allowCheckInUntil = new Date(
+    event.startDateTime.getTime() + 60 * 60 * 1000
+  );
+
+  if (now < allowCheckInFrom) {
+    const timeUntilOpen = Math.ceil((allowCheckInFrom - now) / (1000 * 60));
+    throw new AppError(
+      `Check-in opens ${timeUntilOpen} minutes before event start at ${allowCheckInFrom.toLocaleString()}. Event starts at ${event.startDateTime.toLocaleString()}`,
+      400
+    );
+  }
+
+  if (now > allowCheckInUntil) {
+    throw new AppError(
+      `Check-in closed at ${allowCheckInUntil.toLocaleString()} (1 hour after event start). Please contact the organizer for manual check-in.`,
+      400
+    );
+  }
+
   // Check if user is registered
   const registration = await EventRegistration.findOne({
     event: eventId,
@@ -47,7 +71,7 @@ exports.checkIn = asyncHandler(async (req, res) => {
     throw new AppError("User is not registered for this event", 400);
   }
 
-  // RACE CONDITION FIX: Check if already checked in atomically
+  // EDGE CASE: Check if already checked in with detailed message
   const existingAttendance = await Attendance.findOne({
     event: eventId,
     user: userId,
@@ -55,7 +79,10 @@ exports.checkIn = asyncHandler(async (req, res) => {
 
   if (existingAttendance) {
     if (!existingAttendance.checkOutTime) {
-      throw new AppError("User is already checked in", 400);
+      throw new AppError(
+        `User already checked in at ${existingAttendance.checkInTime.toLocaleString()}`,
+        400
+      );
     }
   }
 

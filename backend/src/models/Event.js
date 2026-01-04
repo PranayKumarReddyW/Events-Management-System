@@ -186,6 +186,23 @@ const eventSchema = new mongoose.Schema(
       default: 0,
       min: [0, "Registered count cannot be negative"],
     },
+    refundPolicy: [
+      {
+        daysBeforeEvent: {
+          type: Number,
+          required: true,
+          min: 0,
+        },
+        refundPercentage: {
+          type: Number,
+          required: true,
+          min: 0,
+          max: 100,
+        },
+      },
+    ],
+    // Default refund policy if not specified:
+    // 7+ days before: 100%, 3-7 days: 75%, 1-3 days: 50%, <1 day: 0%
     category: {
       type: String,
       enum: [

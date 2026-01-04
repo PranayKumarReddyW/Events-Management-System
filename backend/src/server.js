@@ -52,6 +52,11 @@ if (redis) {
   logger.warn("Redis connection failed, running without cache");
 }
 
+// Initialize background jobs for status transitions
+const { initializeStatusTransitionJobs } = require("./jobs/statusTransitions");
+initializeStatusTransitionJobs();
+logger.info("✅ Background jobs initialized");
+
 // Start server
 const server = app.listen(PORT, () => {
   logger.info("=".repeat(50));

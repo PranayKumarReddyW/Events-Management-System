@@ -87,6 +87,7 @@ import {
   Mail,
   Phone,
   Trophy,
+  DollarSign,
 } from "lucide-react";
 import {
   formatDate,
@@ -98,6 +99,9 @@ import { formatCurrency } from "@/utils/helpers";
 import { EVENT_TYPES, API_BASE_URL } from "@/constants";
 import { toast } from "sonner";
 import { paymentsApi } from "@/api/payments";
+import { EligibilityChecker } from "@/components/events/EligibilityChecker";
+import { CapacityIndicator } from "@/components/events/CapacityIndicator";
+import { CountdownTimer } from "@/components/shared/CountdownTimer";
 
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -112,6 +116,7 @@ export default function EventDetailPage() {
   // Team state
   const [createTeamDialogOpen, setCreateTeamDialogOpen] = useState(false);
   const [joinTeamDialogOpen, setJoinTeamDialogOpen] = useState(false);
+  const [eligibilityDialogOpen, setEligibilityDialogOpen] = useState(false);
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
   const [inviteCode, setInviteCode] = useState("");
@@ -137,9 +142,48 @@ export default function EventDetailPage() {
   const isOrganizer =
     event?.organizer?._id === user?._id || event?.organizerId === user?._id;
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const isDepartmentOrganizer = user?.role === "department_organizer";
+  const isFaculty = user?.role === "faculty";
   const isStudent = user?.role === "student";
   // Organizers can only manage their own events, admins can manage all
   const canManageEvent = isOrganizer || isAdmin;
+  // Check if user has elevated permissions (not a student)
+  const hasOrganizerPermissions =
+    isAdmin || isDepartmentOrganizer || isFaculty || isOrganizer;
+
+  // Status-based permissions
+  const isEventDraft = event?.status === "draft";
+  const isEventPublished = event?.status === "published";
+  const isEventOngoing = event?.status === "ongoing";
+  const isEventCompleted = event?.status === "completed";
+  const isEventCancelled = event?.status === "cancelled";
+  const canEditEvent = canManageEvent && !isEventCompleted && !isEventCancelled;
+  const canDeleteEvent = canManageEvent && (isEventDraft || isEventCancelled);
+  const canTogglePublish =
+    canManageEvent && !isEventCompleted && !isEventCancelled;
+  const canToggleRegistrations =
+    canManageEvent && !isEventCompleted && !isEventCancelled;
+
+  // Check user eligibility
+  const checkUserEligibility = () => {
+    if (!user || !isStudent) return true; // Non-students always eligible for viewing
+
+    const checks = {
+      department:
+        !event?.eligibleDepartments?.length ||
+        event.eligibleDepartments.includes(user.department || ""),
+      year:
+        !event?.eligibleYears?.length ||
+        event.eligibleYears.includes(user.yearOfStudy || 0),
+      external: (user as any).isOutsideCollege
+        ? event?.allowExternalStudents || false
+        : true,
+    };
+
+    return checks.department && checks.year && checks.external;
+  };
+
+  const isUserEligible = checkUserEligibility();
 
   // Get user's teams for this event
   const { data: myTeamsData } = useMyTeams(!!id && isStudent);
@@ -687,116 +731,226 @@ export default function EventDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        {canManageEvent && (
+        {/* Only show organizer controls to non-students with management permissions */}
+        {hasOrganizerPermissions && canManageEvent && (
           <div className="flex gap-2">
-            <div className="flex items-center gap-2 px-3 py-2 border rounded-md">
-              {event.status === "published" ? (
-                <Eye className="h-4 w-4" />
-              ) : (
-                <EyeOff className="h-4 w-4" />
-              )}
-              <span className="text-sm">
-                {event.status === "published" ? "Published" : "Draft"}
-              </span>
-              <Switch
-                checked={event.status === "published"}
-                onCheckedChange={handlePublishToggle}
-                disabled={publishEvent.isPending}
-              />
-            </div>
-            <div className="flex items-center gap-2 px-3 py-2 border rounded-md">
-              {event.registrationsOpen ? (
-                <Unlock className="h-4 w-4" />
-              ) : (
-                <Lock className="h-4 w-4" />
-              )}
-              <span className="text-sm">
-                {event.registrationsOpen ? "Open" : "Locked"}
-              </span>
-              <Switch
-                checked={event.registrationsOpen}
-                onCheckedChange={handleToggleRegistrations}
-                disabled={updateEvent.isPending}
-              />
-            </div>
-            <Button variant="outline" asChild>
-              <Link to={`/events/${id}/edit`}>
-                <Edit className="mr-2 h-4 w-4" />
-                Edit
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link to={`/events/${id}/teams`}>
-                <Users className="mr-2 h-4 w-4" />
-                Teams
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link to={`/events/${id}/participants`}>
-                <Users className="mr-2 h-4 w-4" />
-                Participants
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link to={`/events/${id}/rounds`}>
-                <Trophy className="mr-2 h-4 w-4" />
-                Rounds
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link to={`/events/${id}/results`}>
-                <Award className="mr-2 h-4 w-4" />
-                Results
-              </Link>
-            </Button>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive">
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
+            {/* Publish/Draft Toggle - Only if event can be published */}
+            {canTogglePublish && (
+              <div className="flex items-center gap-2 px-3 py-2 border rounded-md">
+                {event.status === "published" ? (
+                  <Eye className="h-4 w-4" />
+                ) : (
+                  <EyeOff className="h-4 w-4" />
+                )}
+                <span className="text-sm">
+                  {event.status === "published" ? "Published" : "Draft"}
+                </span>
+                <Switch
+                  checked={event.status === "published"}
+                  onCheckedChange={handlePublishToggle}
+                  disabled={publishEvent.isPending}
+                />
+              </div>
+            )}
+
+            {/* Registrations Toggle - Only for published events that aren't completed/cancelled */}
+            {canToggleRegistrations && isEventPublished && (
+              <div className="flex items-center gap-2 px-3 py-2 border rounded-md">
+                {event.registrationsOpen ? (
+                  <Unlock className="h-4 w-4" />
+                ) : (
+                  <Lock className="h-4 w-4" />
+                )}
+                <span className="text-sm">
+                  {event.registrationsOpen ? "Open" : "Locked"}
+                </span>
+                <Switch
+                  checked={event.registrationsOpen}
+                  onCheckedChange={handleToggleRegistrations}
+                  disabled={updateEvent.isPending}
+                />
+              </div>
+            )}
+
+            {/* Edit - Only if not completed/cancelled */}
+            {canEditEvent && (
+              <Button variant="outline" asChild>
+                <Link to={`/events/${id}/edit`}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit
+                </Link>
+              </Button>
+            )}
+
+            {/* Teams, Participants, Rounds - Show for published/ongoing/completed */}
+            {(isEventPublished || isEventOngoing || isEventCompleted) && (
+              <>
+                <Button variant="outline" asChild>
+                  <Link to={`/events/${id}/teams`}>
+                    <Users className="mr-2 h-4 w-4" />
+                    Teams
+                  </Link>
                 </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This action cannot be undone. This will permanently delete
-                    the event.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    variant="destructive"
-                    onClick={handleDelete}
-                  >
+                <Button variant="outline" asChild>
+                  <Link to={`/events/${id}/participants`}>
+                    <Users className="mr-2 h-4 w-4" />
+                    Participants
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link to={`/events/${id}/rounds`}>
+                    <Trophy className="mr-2 h-4 w-4" />
+                    Rounds
+                  </Link>
+                </Button>
+              </>
+            )}
+
+            {/* Results - Only for ongoing/completed */}
+            {(isEventOngoing || isEventCompleted) && (
+              <Button variant="outline" asChild>
+                <Link to={`/events/${id}/results`}>
+                  <Award className="mr-2 h-4 w-4" />
+                  Results
+                </Link>
+              </Button>
+            )}
+
+            {/* Delete - Only for draft/cancelled */}
+            {canDeleteEvent && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive">
+                    <Trash2 className="mr-2 h-4 w-4" />
                     Delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This action cannot be undone. This will permanently delete
+                      the event{isEventDraft ? "" : " and all associated data"}.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      variant="destructive"
+                      onClick={handleDelete}
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
         )}
       </div>
 
-      {/* Registration Status Indicators for Students */}
-      {isStudent && (
-        <>
-          {/* Already Registered - Success State */}
-          {hasAlreadyRegistered && (
-            <div className="p-4 rounded-lg border-2 border-green-500/30 bg-green-50 dark:bg-green-950/20">
+      {/* Status-based info messages for organizers */}
+      {hasOrganizerPermissions && canManageEvent && (
+        <div className="space-y-3">
+          {isEventCompleted && (
+            <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-md">
+              <p className="text-sm text-blue-800 dark:text-blue-200 flex items-center gap-2">
+                <CheckCircle className="h-4 w-4" />
+                <span>
+                  <strong>Event Completed:</strong> You can view results and
+                  download reports, but editing is disabled.
+                </span>
+              </p>
+            </div>
+          )}
+          {isEventCancelled && (
+            <div className="p-3 bg-gray-50 dark:bg-gray-950/20 border border-gray-200 dark:border-gray-800 rounded-md">
+              <p className="text-sm text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                <XCircle className="h-4 w-4" />
+                <span>
+                  <strong>Event Cancelled:</strong> This event has been
+                  cancelled. Only deletion is allowed.
+                </span>
+              </p>
+            </div>
+          )}
+          {isEventDraft && (
+            <div className="p-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+              <p className="text-sm text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
+                <EyeOff className="h-4 w-4" />
+                <span>
+                  <strong>Draft Event:</strong> This event is not visible to
+                  students. Publish it to make it available for registrations.
+                </span>
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Already Registered Banner - Top Priority for Students */}
+      {isStudent && hasAlreadyRegistered && (
+        <div className="p-4 rounded-lg border-2 border-green-500/30 bg-green-50 dark:bg-green-950/20">
+          <div className="flex items-start gap-3">
+            <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-semibold text-green-900 dark:text-green-100">
+                Registration Confirmed
+              </p>
+              <p className="text-sm text-green-800 dark:text-green-200 mt-1">
+                You are already registered for this event.
+                {myActiveRegistration?.paymentStatus === "pending" &&
+                  " Payment is pending."}
+                {myActiveRegistration?.paymentStatus === "paid" &&
+                  " Payment completed."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Event Banner */}
+      {event.bannerImage && (
+        <div className="relative h-48 sm:h-64 md:h-80 lg:h-96 w-full overflow-hidden rounded-lg bg-muted shadow-md">
+          <img
+            src={
+              event.bannerImage.startsWith("data:image")
+                ? event.bannerImage
+                : `${API_BASE_URL}${event.bannerImage}`
+            }
+            alt={event.title}
+            className="object-cover w-full h-full"
+            onError={(e) => {
+              console.error("Image failed to load:", event.bannerImage);
+              e.currentTarget.style.display = "none";
+            }}
+          />
+          {!event.bannerImage.startsWith("data:image") && (
+            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+              <Calendar className="h-16 w-16 sm:h-20 sm:w-20" />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Student Status Alerts - After Banner */}
+      {isStudent && !hasAlreadyRegistered && (
+        <div className="space-y-3">
+          {/* Not Eligible Warning - Show First */}
+          {!isUserEligible && !registrationsClosed && (
+            <div
+              className="p-4 rounded-lg border-2 border-red-500/30 bg-red-50 dark:bg-red-950/20 cursor-pointer hover:bg-red-100 dark:hover:bg-red-950/30 transition-colors"
+              onClick={() => setEligibilityDialogOpen(true)}
+            >
               <div className="flex items-start gap-3">
-                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
+                <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
                 <div>
-                  <p className="font-semibold text-green-900 dark:text-green-100">
-                    Registration Confirmed
+                  <p className="font-semibold text-red-900 dark:text-red-100">
+                    Not Eligible - Click for Details
                   </p>
-                  <p className="text-sm text-green-800 dark:text-green-200 mt-1">
-                    You are already registered for this event.
-                    {myActiveRegistration?.paymentStatus === "pending" &&
-                      " Payment is pending."}
-                    {myActiveRegistration?.paymentStatus === "paid" &&
-                      " Payment completed."}
+                  <p className="text-sm text-red-800 dark:text-red-200 mt-1">
+                    You do not meet the eligibility criteria for this event.
+                    Click here to see why.
                   </p>
                 </div>
               </div>
@@ -804,33 +958,30 @@ export default function EventDetailPage() {
           )}
 
           {/* Registrations Closed */}
-          {!hasAlreadyRegistered &&
-            registrationsClosed &&
-            event.status === "published" && (
-              <div className="p-4 rounded-lg border-2 border-orange-500/30 bg-orange-50 dark:bg-orange-950/20">
-                <div className="flex items-start gap-3">
-                  <Lock className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-orange-900 dark:text-orange-100">
-                      Registrations Closed
-                    </p>
-                    <p className="text-sm text-orange-800 dark:text-orange-200 mt-1">
-                      {!event.registrationsOpen
-                        ? "The organizer has closed registrations for this event."
-                        : "The registration deadline has passed."}
-                    </p>
-                  </div>
+          {registrationsClosed && event.status === "published" && (
+            <div className="p-4 rounded-lg border-2 border-orange-500/30 bg-orange-50 dark:bg-orange-950/20">
+              <div className="flex items-start gap-3">
+                <Lock className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-semibold text-orange-900 dark:text-orange-100">
+                    Registrations Closed
+                  </p>
+                  <p className="text-sm text-orange-800 dark:text-orange-200 mt-1">
+                    {!event.registrationsOpen
+                      ? "The organizer has closed registrations for this event."
+                      : "The registration deadline has passed."}
+                  </p>
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
           {/* Event Full */}
-          {!hasAlreadyRegistered &&
-            !registrationsClosed &&
+          {!registrationsClosed &&
             actualRegistrationCount >= (event.maxParticipants || Infinity) && (
               <div className="p-4 rounded-lg border-2 border-red-500/30 bg-red-50 dark:bg-red-950/20">
                 <div className="flex items-start gap-3">
-                  <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+                  <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="font-semibold text-red-900 dark:text-red-100">
                       Event Full
@@ -845,12 +996,11 @@ export default function EventDetailPage() {
             )}
 
           {/* Event Already Started/Completed */}
-          {!hasAlreadyRegistered &&
-            !registrationsClosed &&
+          {!registrationsClosed &&
             ["ongoing", "completed"].includes(event.status) && (
               <div className="p-4 rounded-lg border-2 border-gray-500/30 bg-gray-50 dark:bg-gray-950/20">
                 <div className="flex items-start gap-3">
-                  <Lock className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-0.5" />
+                  <Lock className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="font-semibold text-gray-900 dark:text-gray-100">
                       Event{" "}
@@ -865,40 +1015,16 @@ export default function EventDetailPage() {
                 </div>
               </div>
             )}
-        </>
-      )}
-
-      {event.bannerImage && (
-        <div className="relative h-48 sm:h-64 md:h-80 lg:h-96 w-full overflow-hidden rounded-lg bg-muted">
-          <img
-            src={
-              event.bannerImage.startsWith("data:image")
-                ? event.bannerImage
-                : `${API_BASE_URL}${event.bannerImage}`
-            }
-            alt={event.title}
-            className="object-cover w-full h-full"
-            onError={(e) => {
-              console.error("Image failed to load:", event.bannerImage);
-              e.currentTarget.style.display = "none";
-            }}
-          />
-          {/* Fallback if image fails only if it's not a base64 image */}
-          {!event.bannerImage.startsWith("data:image") && (
-            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-              <Calendar className="h-16 w-16 sm:h-20 sm:w-20" />
-            </div>
-          )}
         </div>
       )}
 
       {/* Additional Images Gallery */}
       {event.images && event.images.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {event.images.map((image: string, index: number) => (
             <div
               key={index}
-              className="relative h-32 sm:h-40 overflow-hidden rounded-lg bg-muted"
+              className="relative h-32 sm:h-40 overflow-hidden rounded-lg bg-muted shadow-sm hover:shadow-md transition-shadow"
             >
               <img
                 src={
@@ -922,8 +1048,9 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-        <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-6 mt-6">
+        <div className="space-y-6">
           <Card>
             <CardHeader className="p-4 sm:p-6">
               <div className="flex flex-col sm:flex-row items-start justify-between gap-3 sm:gap-4">
@@ -1072,7 +1199,9 @@ export default function EventDetailPage() {
           </Card>
         </div>
 
+        {/* Sidebar */}
         <div className="space-y-6">
+          {/* Registration Deadline - Very Compact at Top */}
           <Card>
             <CardHeader>
               <CardTitle>Event Details</CardTitle>
@@ -1130,39 +1259,18 @@ export default function EventDetailPage() {
               <div className="flex items-start gap-3">
                 <Users className="h-5 w-5 text-muted-foreground mt-0.5" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium">Participants</p>
-                  <p className="text-sm text-muted-foreground">
-                    {actualRegistrationCount} registered
-                    {event.maxParticipants && ` / ${event.maxParticipants} max`}
-                  </p>
-                  {event.maxParticipants && (
-                    <div className="mt-2">
-                      <div className="w-full bg-secondary rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full transition-all ${
-                            actualRegistrationCount >= event.maxParticipants
-                              ? "bg-red-500"
-                              : actualRegistrationCount >=
-                                event.maxParticipants * 0.8
-                              ? "bg-yellow-500"
-                              : "bg-green-500"
-                          }`}
-                          style={{
-                            width: `${Math.min(
-                              (actualRegistrationCount /
-                                event.maxParticipants) *
-                                100,
-                              100
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                      {actualRegistrationCount >= event.maxParticipants && (
-                        <p className="text-xs text-red-500 mt-1 font-medium">
-                          Event is full
-                        </p>
-                      )}
-                    </div>
+                  <p className="text-sm font-medium mb-3">Participants</p>
+                  {event.maxParticipants ? (
+                    <CapacityIndicator
+                      current={actualRegistrationCount}
+                      max={event.maxParticipants}
+                      variant="detailed"
+                      showWaitlistWarning={true}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      {actualRegistrationCount} registered (No limit)
+                    </p>
                   )}
                 </div>
               </div>
@@ -1189,52 +1297,13 @@ export default function EventDetailPage() {
                 </div>
               )}
 
-              {event.eligibility && (
+              {event.isPaid && (
                 <div className="flex items-start gap-3">
-                  <CheckCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  <DollarSign className="h-5 w-5 text-muted-foreground mt-0.5" />
                   <div className="flex-1">
-                    <p className="text-sm font-medium">Eligibility Criteria</p>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                      {event.eligibility}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {event.eligibleYears && event.eligibleYears.length > 0 && (
-                <div className="flex items-start gap-3">
-                  <CheckCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Eligible Years</p>
+                    <p className="text-sm font-medium">Registration Fee</p>
                     <p className="text-sm text-muted-foreground">
-                      Year {event.eligibleYears.sort().join(", Year ")}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {event.eligibleDepartments &&
-                event.eligibleDepartments.length > 0 && (
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">
-                        Eligible Departments
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {event.eligibleDepartments.join(", ")}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-              {event.allowExternalStudents !== undefined && (
-                <div className="flex items-start gap-3">
-                  <CheckCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">External Students</p>
-                    <p className="text-sm text-muted-foreground">
-                      {event.allowExternalStudents ? "Allowed" : "Not Allowed"}
+                      {formatCurrency(event.amount, event.currency)}
                     </p>
                   </div>
                 </div>
@@ -1250,6 +1319,10 @@ export default function EventDetailPage() {
                 </div>
               </div>
             </CardContent>
+          </Card>
+
+          {/* Registration Actions Card */}
+          <Card>
             {event.maxTeamSize &&
               event.maxTeamSize > 1 &&
               isStudent &&
@@ -1317,24 +1390,30 @@ export default function EventDetailPage() {
                     !registrationsClosed &&
                     myTeamsForEvent.length > 0 &&
                     selectedTeamId && (
-                      <Button
-                        className="w-full min-h-11"
-                        onClick={handleRegister}
-                        disabled={
-                          createRegistration.isPending || paymentLoading
-                        }
-                      >
-                        {paymentLoading
-                          ? "Processing Payment..."
-                          : createRegistration.isPending
-                          ? "Registering..."
-                          : event.isPaid
-                          ? `Register Team & Pay ${formatCurrency(
-                              event.amount,
-                              event.currency
-                            )}`
-                          : "Register Team"}
-                      </Button>
+                      <>
+                        <Button
+                          className="w-full min-h-11"
+                          onClick={handleRegister}
+                          disabled={
+                            createRegistration.isPending ||
+                            paymentLoading ||
+                            !isUserEligible
+                          }
+                        >
+                          {!isUserEligible
+                            ? "Not Eligible to Register"
+                            : paymentLoading
+                            ? "Processing Payment..."
+                            : createRegistration.isPending
+                            ? "Registering..."
+                            : event.isPaid
+                            ? `Register Team & Pay ${formatCurrency(
+                                event.amount,
+                                event.currency
+                              )}`
+                            : "Register Team"}
+                        </Button>
+                      </>
                     )}
 
                   {hasAlreadyRegistered && (
@@ -1552,22 +1631,30 @@ export default function EventDetailPage() {
                       )}
                     </div>
                   ) : canRegister ? (
-                    <Button
-                      className="w-full min-h-11"
-                      onClick={handleRegister}
-                      disabled={createRegistration.isPending || paymentLoading}
-                    >
-                      {paymentLoading
-                        ? "Processing Payment..."
-                        : createRegistration.isPending
-                        ? "Registering..."
-                        : event.isPaid
-                        ? `Register & Pay ${formatCurrency(
-                            event.amount,
-                            event.currency
-                          )}`
-                        : "Register Now"}
-                    </Button>
+                    <>
+                      <Button
+                        className="w-full min-h-11"
+                        onClick={handleRegister}
+                        disabled={
+                          createRegistration.isPending ||
+                          paymentLoading ||
+                          !isUserEligible
+                        }
+                      >
+                        {!isUserEligible
+                          ? "Not Eligible to Register"
+                          : paymentLoading
+                          ? "Processing Payment..."
+                          : createRegistration.isPending
+                          ? "Registering..."
+                          : event.isPaid
+                          ? `Register & Pay ${formatCurrency(
+                              event.amount,
+                              event.currency
+                            )}`
+                          : "Register Now"}
+                      </Button>
+                    </>
                   ) : null}
                 </CardFooter>
               )}
@@ -1890,6 +1977,35 @@ export default function EventDetailPage() {
             </Card>
           </div>
         )}
+
+      {/* Eligibility Details Dialog */}
+      {isStudent && !hasAlreadyRegistered && user && event && (
+        <Dialog
+          open={eligibilityDialogOpen}
+          onOpenChange={setEligibilityDialogOpen}
+        >
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Eligibility Details</DialogTitle>
+              <DialogDescription>
+                Check why you may not be eligible for this event.
+              </DialogDescription>
+            </DialogHeader>
+            <EligibilityChecker
+              user={{
+                department: user.department || "",
+                yearOfStudy: user.yearOfStudy || 1,
+                isOutsideCollege: (user as any).isOutsideCollege,
+              }}
+              event={{
+                eligibleDepartments: event.eligibleDepartments || [],
+                eligibleYears: event.eligibleYears || [],
+                allowExternalStudents: event.allowExternalStudents || false,
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

@@ -38,6 +38,20 @@ exports.submitFeedback = asyncHandler(async (req, res) => {
     throw new AppError("Event not found", 404);
   }
 
+  // EDGE CASE: Block feedback before event ends (by date, not just status)
+  const now = new Date();
+  if (now < new Date(event.endDateTime)) {
+    const hoursRemaining = Math.ceil(
+      (new Date(event.endDateTime) - now) / (1000 * 60 * 60)
+    );
+    throw new AppError(
+      `Feedback will be available after the event ends in ${hoursRemaining} hours (${new Date(
+        event.endDateTime
+      ).toLocaleString()})`,
+      400
+    );
+  }
+
   // Check if event is completed
   if (event.status !== "completed") {
     throw new AppError(

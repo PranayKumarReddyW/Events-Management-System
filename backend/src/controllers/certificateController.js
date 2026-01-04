@@ -50,22 +50,29 @@ exports.generateCertificates = asyncHandler(async (req, res) => {
 
   let registrations;
   if (registrationIds && registrationIds.length > 0) {
+    // EDGE CASE: Only generate for confirmed registrations with check-in
     registrations = await EventRegistration.find({
       _id: { $in: registrationIds },
       event: eventId,
       status: "confirmed",
+      checkInTime: { $ne: null }, // Must have attended
+      disqualified: { $ne: true }, // Not disqualified
     }).populate("user", "fullName email");
   } else {
-    // Generate for all confirmed and checked-in participants
+    // EDGE CASE: Generate for all confirmed, checked-in, non-disqualified participants
     registrations = await EventRegistration.find({
       event: eventId,
       status: "confirmed",
-      checkInTime: { $ne: null },
+      checkInTime: { $ne: null }, // Only attendees
+      disqualified: { $ne: true }, // Skip disqualified
     }).populate("user", "fullName email");
   }
 
   if (registrations.length === 0) {
-    throw new AppError("No eligible participants found", 400);
+    throw new AppError(
+      "No eligible participants found. Only participants who checked in and are not disqualified can receive certificates.",
+      400
+    );
   }
 
   const generatedCertificates = [];

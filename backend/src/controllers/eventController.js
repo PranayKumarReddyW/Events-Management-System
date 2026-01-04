@@ -8,10 +8,93 @@ const fs = require("fs");
 // Create event
 exports.createEvent = async (req, res, next) => {
   try {
+    // EDGE CASE: Prevent creating events with past dates (unless admin override)
+    const now = new Date();
+    const isAdmin = ["admin", "super_admin"].includes(req.user.role);
+
+    if (!isAdmin && new Date(req.body.startDateTime) < now) {
+      return next(new AppError("Event start date must be in the future", 400));
+    }
+
+    if (!isAdmin && new Date(req.body.endDateTime) < now) {
+      return next(new AppError("Event end date must be in the future", 400));
+    }
+
+    // EDGE CASE: Validate registration deadline is before event start
+    if (
+      new Date(req.body.registrationDeadline) >=
+      new Date(req.body.startDateTime)
+    ) {
+      return next(
+        new AppError(
+          "Registration deadline must be before event start date",
+          400
+        )
+      );
+    }
+
+    // EDGE CASE: Validate end date is after start date
+    if (new Date(req.body.endDateTime) <= new Date(req.body.startDateTime)) {
+      return next(new AppError("Event end date must be after start date", 400));
+    }
+
+    // EDGE CASE: Validate team size consistency
+    if (req.body.maxTeamSize && req.body.minTeamSize) {
+      const maxSize = parseInt(req.body.maxTeamSize);
+      const minSize = parseInt(req.body.minTeamSize);
+      if (maxSize < minSize) {
+        return next(
+          new AppError(
+            "Maximum team size must be greater than or equal to minimum team size",
+            400
+          )
+        );
+      }
+    }
+
     // Check for duplicate title
     const existingEvent = await Event.findOne({ title: req.body.title });
     if (existingEvent) {
       return next(new AppError("An event with this title already exists", 400));
+    }
+
+    // EDGE CASE: Prevent creating events with past dates
+    if (new Date(req.body.startDateTime) < now) {
+      return next(new AppError("Event start date must be in the future", 400));
+    }
+
+    if (new Date(req.body.endDateTime) < now) {
+      return next(new AppError("Event end date must be in the future", 400));
+    }
+
+    // EDGE CASE: Validate registration deadline is before event start
+    if (
+      new Date(req.body.registrationDeadline) >=
+      new Date(req.body.startDateTime)
+    ) {
+      return next(
+        new AppError(
+          "Registration deadline must be before event start date",
+          400
+        )
+      );
+    }
+
+    // EDGE CASE: Validate end date is after start date
+    if (new Date(req.body.endDateTime) <= new Date(req.body.startDateTime)) {
+      return next(new AppError("Event end date must be after start date", 400));
+    }
+
+    // EDGE CASE: Validate team size consistency
+    if (req.body.maxTeamSize && req.body.minTeamSize) {
+      if (parseInt(req.body.maxTeamSize) < parseInt(req.body.minTeamSize)) {
+        return next(
+          new AppError(
+            "Maximum team size must be greater than or equal to minimum team size",
+            400
+          )
+        );
+      }
     }
 
     const eventData = {
@@ -161,7 +244,6 @@ exports.createEvent = async (req, res, next) => {
     // Approval workflow:
     // - Admins can always auto-approve.
     // - Non-admins only require approval when event.requiresApproval is true.
-    const isAdmin = ["admin", "super_admin"].includes(req.user.role);
     if (isAdmin || event.requiresApproval !== true) {
       event.approvalStatus = "approved";
       await event.save();
@@ -514,6 +596,24 @@ exports.updateEvent = async (req, res, next) => {
 
     console.log("[updateEvent] Current event status:", event.status);
     console.log("[updateEvent] New status being set:", req.body.status);
+
+    // EDGE CASE: Prevent editing completed events (admin override only)
+    if (
+      event.status === "completed" &&
+      !["admin", "super_admin"].includes(req.user.role)
+    ) {
+      return next(
+        new AppError(
+          "Cannot edit completed events. Contact admin for changes.",
+          403
+        )
+      );
+    }
+
+    // EDGE CASE: Prevent editing cancelled events
+    if (event.status === "cancelled") {
+      return next(new AppError("Cannot edit cancelled events", 400));
+    }
 
     // Check permissions
     if (
@@ -868,6 +968,19 @@ exports.deleteEvent = async (req, res, next) => {
 
     if (!event) {
       return next(new AppError("Event not found", 404));
+    }
+
+    // EDGE CASE: Prevent deletion of completed events (they should be archived)
+    if (
+      event.status === "completed" &&
+      !["admin", "super_admin"].includes(req.user.role)
+    ) {
+      return next(
+        new AppError(
+          "Cannot delete completed events. They are archived for records. Contact admin if needed.",
+          400
+        )
+      );
     }
 
     // Check permissions

@@ -46,6 +46,8 @@ import {
 import { formatDate } from "@/utils/date";
 import { formatCurrency } from "@/utils/helpers";
 import { toast } from "sonner";
+import { PaymentDeadlineAlert } from "@/components/payments/PaymentDeadlineAlert";
+import { WaitlistTracker } from "@/components/registrations/WaitlistTracker";
 
 const MyRegistrationsPage = () => {
   const navigate = useNavigate();
@@ -59,8 +61,14 @@ const MyRegistrationsPage = () => {
   });
   const [paymentLoading, setPaymentLoading] = useState<string | null>(null);
 
-  const { data: registrations, isLoading } = useMyRegistrations(filters);
+  const { data: registrationsResponse, isLoading } =
+    useMyRegistrations(filters);
   const cancelRegistration = useCancelRegistration();
+
+  // Extract registrations array from response with safety check
+  const registrations = Array.isArray(registrationsResponse?.data)
+    ? registrationsResponse.data
+    : [];
 
   const handleCancelRegistration = async (registrationId: string) => {
     // NULL CHECK: Validate registrationId
@@ -355,6 +363,49 @@ const MyRegistrationsPage = () => {
         </Select>
       </div>
 
+      {/* Urgent Payment Alerts */}
+      {registrations
+        .filter(
+          (reg) =>
+            reg.paymentStatus === "pending" &&
+            typeof reg.event === "object" &&
+            (reg.event as any).isPaid &&
+            reg.createdAt
+        )
+        .map((reg) => {
+          const event = reg.event as any;
+          const paymentDeadline = new Date(reg.createdAt);
+          paymentDeadline.setHours(paymentDeadline.getHours() + 24);
+          return (
+            <PaymentDeadlineAlert
+              key={reg._id}
+              registrationDate={reg.createdAt}
+              amount={event.registrationFee}
+              onPayNow={() => handlePayNow(reg._id)}
+              className="mb-4"
+            />
+          );
+        })}
+
+      {/* Waitlist Alerts */}
+      {registrations
+        .filter(
+          (reg) => reg.status === "waitlisted" && (reg as any).waitlistPosition
+        )
+        .map((reg) => {
+          const event = reg.event as any;
+          return (
+            <WaitlistTracker
+              key={reg._id}
+              position={(reg as any).waitlistPosition!}
+              totalWaitlisted={(reg as any).waitlistPosition || 1}
+              maxCapacity={event.maxParticipants}
+              currentRegistered={event.registeredCount || 0}
+              className="mb-4"
+            />
+          );
+        })}
+
       {/* Table */}
       <div className="border rounded-lg overflow-x-auto">
         <Table>
@@ -371,7 +422,7 @@ const MyRegistrationsPage = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {!registrations?.data || registrations.data.length === 0 ? (
+            {registrations.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center py-8">
                   <div className="flex flex-col items-center gap-2">
@@ -389,7 +440,7 @@ const MyRegistrationsPage = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              registrations.data.map((registration: any) => (
+              registrations.map((registration: any) => (
                 <TableRow key={registration._id}>
                   {/* Event Title */}
                   <TableCell className="font-medium">
@@ -428,17 +479,39 @@ const MyRegistrationsPage = () => {
                   </TableCell>
 
                   {/* Registration Status */}
-                  <TableCell>{getStatusBadge(registration.status)}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      {getStatusBadge(registration.status)}
+                      {registration.status === "waitlisted" &&
+                        registration.waitlistPosition && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs border-blue-500 text-blue-700"
+                          >
+                            Position #{registration.waitlistPosition}
+                          </Badge>
+                        )}
+                    </div>
+                  </TableCell>
 
                   {/* Payment Status */}
                   <TableCell>
-                    {registration.event.isPaid ? (
-                      getPaymentStatusBadge(registration.paymentStatus)
-                    ) : (
-                      <span className="text-sm text-muted-foreground">
-                        Free
-                      </span>
-                    )}
+                    <div className="flex flex-col gap-2">
+                      {registration.event.isPaid ? (
+                        getPaymentStatusBadge(registration.paymentStatus)
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          Free
+                        </span>
+                      )}
+                      {/* Show payment deadline if pending */}
+                      {registration.paymentStatus === "pending" &&
+                        registration.event.isPaid && (
+                          <div className="text-xs text-orange-600 font-medium animate-pulse">
+                            Payment due soon!
+                          </div>
+                        )}
+                    </div>
                   </TableCell>
 
                   {/* Amount */}
@@ -598,27 +671,28 @@ const MyRegistrationsPage = () => {
       </div>
 
       {/* Pagination */}
-      {registrations?.pagination && registrations.pagination.pages > 1 && (
-        <div className="flex justify-center gap-2 mt-6">
-          <Button
-            variant="outline"
-            onClick={() => setFilters({ ...filters, page: filters.page - 1 })}
-            disabled={filters.page === 1}
-          >
-            Previous
-          </Button>
-          <span className="flex items-center px-4">
-            Page {filters.page} of {registrations.pagination.pages}
-          </span>
-          <Button
-            variant="outline"
-            onClick={() => setFilters({ ...filters, page: filters.page + 1 })}
-            disabled={filters.page >= registrations.pagination.pages}
-          >
-            Next
-          </Button>
-        </div>
-      )}
+      {registrationsResponse?.pagination &&
+        registrationsResponse.pagination.pages > 1 && (
+          <div className="flex justify-center gap-2 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => setFilters({ ...filters, page: filters.page - 1 })}
+              disabled={filters.page === 1}
+            >
+              Previous
+            </Button>
+            <span className="flex items-center px-4">
+              Page {filters.page} of {registrationsResponse.pagination.pages}
+            </span>
+            <Button
+              variant="outline"
+              onClick={() => setFilters({ ...filters, page: filters.page + 1 })}
+              disabled={filters.page >= registrationsResponse.pagination.pages}
+            >
+              Next
+            </Button>
+          </div>
+        )}
     </div>
   );
 };

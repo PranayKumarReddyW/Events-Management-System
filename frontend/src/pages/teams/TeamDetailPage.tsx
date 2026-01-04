@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { formatDate } from "@/utils/date";
 import { toast } from "sonner";
+import { TeamCapacityIndicator } from "@/components/teams/TeamCapacityIndicator";
 
 export default function TeamDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -327,15 +328,6 @@ export default function TeamDetailPage() {
               </div>
             </div>
             <div className="flex items-center gap-3 p-4 rounded-lg bg-muted">
-              <Users className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="text-sm text-muted-foreground">Team Size</p>
-                <p className="font-medium">
-                  {team.members?.length || 0} / {team.maxSize}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 p-4 rounded-lg bg-muted">
               <Calendar className="h-5 w-5 text-muted-foreground" />
               <div>
                 <p className="text-sm text-muted-foreground">Created</p>
@@ -343,6 +335,14 @@ export default function TeamDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Team Capacity Indicator */}
+          <TeamCapacityIndicator
+            currentMembers={team.members?.length || 0}
+            minSize={(team as any).minSize || 1}
+            maxSize={team.maxSize}
+            className="mt-4"
+          />
 
           {isLeader && (
             <div className="space-y-3 p-4 rounded-lg border-2 border-primary/20 bg-primary/5">

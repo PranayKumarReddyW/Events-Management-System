@@ -26,6 +26,7 @@ import { formatDateRange, getEventStatus } from "@/utils/date";
 import { formatCurrency } from "@/utils/helpers";
 import { EVENT_TYPES, API_BASE_URL } from "@/constants";
 import type { EventFilters } from "@/api";
+import { CapacityBadge } from "@/components/events/CapacityIndicator";
 
 export default function EventsPage() {
   const { user } = useAuth();
@@ -285,15 +286,23 @@ export default function EventsPage() {
                         <span className="line-clamp-1">{event.venue}</span>
                       </div>
                     )}
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Users className="h-4 w-4" />
-                      <span>
-                        {event.registeredCount || 0}
-                        {event.maxParticipants
-                          ? ` / ${event.maxParticipants}`
-                          : ""}{" "}
-                        registered
-                      </span>
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Users className="h-4 w-4" />
+                        <span>
+                          {event.registeredCount || 0}
+                          {event.maxParticipants
+                            ? ` / ${event.maxParticipants}`
+                            : ""}{" "}
+                          registered
+                        </span>
+                      </div>
+                      {event.maxParticipants && (
+                        <CapacityBadge
+                          currentCount={event.registeredCount || 0}
+                          maxCapacity={event.maxParticipants}
+                        />
+                      )}
                     </div>
                   </CardContent>
                   <CardFooter>

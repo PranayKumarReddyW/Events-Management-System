@@ -74,6 +74,110 @@ async function createBulkNotifications(notificationsData) {
 }
 
 /**
+ * Send bulk notifications with batching and retry logic
+ * EDGE CASE: Batch into groups to avoid rate limits and retry on failure
+ * @param {Array} recipients - Array of user IDs
+ * @param {Object} notificationTemplate - Notification template with title, message, type, etc.
+ * @param {Number} batchSize - Number of notifications per batch (default 100)
+ * @param {Number} retryAttempts - Number of retry attempts for failures (default 3)
+ * @returns {Promise<Object>} - Summary of successful and failed notifications
+ */
+async function sendBulkNotificationsWithBatching(
+  recipients,
+  notificationTemplate,
+  { batchSize = 100, retryAttempts = 3 } = {}
+) {
+  try {
+    // EDGE CASE: Remove duplicate recipients
+    const uniqueRecipients = [...new Set(recipients)];
+
+    // EDGE CASE: Filter out null/undefined recipients
+    const validRecipients = uniqueRecipients.filter((r) => r);
+
+    if (validRecipients.length === 0) {
+      logger.warn("No valid recipients for bulk notifications");
+      return { successful: 0, failed: 0, errors: [] };
+    }
+
+    // EDGE CASE: Split into batches to respect rate limits
+    const batches = [];
+    for (let i = 0; i < validRecipients.length; i += batchSize) {
+      batches.push(validRecipients.slice(i, i + batchSize));
+    }
+
+    const results = {
+      successful: 0,
+      failed: 0,
+      errors: [],
+    };
+
+    // Process each batch
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
+      logger.info(
+        `Processing notification batch ${batchIndex + 1}/${batches.length} (${
+          batch.length
+        } recipients)`
+      );
+
+      // Create notifications for this batch
+      const notificationsData = batch.map((recipientId) => ({
+        recipient: recipientId,
+        ...notificationTemplate,
+        scheduledFor: new Date(),
+      }));
+
+      // EDGE CASE: Retry logic for failed batches
+      let attempt = 0;
+      let success = false;
+
+      while (attempt < retryAttempts && !success) {
+        try {
+          await Notification.insertMany(notificationsData);
+          results.successful += batch.length;
+          success = true;
+          logger.info(`Batch ${batchIndex + 1} sent successfully`);
+        } catch (error) {
+          attempt++;
+          logger.error(
+            `Batch ${batchIndex + 1} attempt ${attempt} failed:`,
+            error.message
+          );
+
+          if (attempt >= retryAttempts) {
+            // Final attempt failed, log individual failures
+            results.failed += batch.length;
+            results.errors.push({
+              batch: batchIndex + 1,
+              recipients: batch,
+              error: error.message,
+            });
+          } else {
+            // EDGE CASE: Wait before retry (exponential backoff)
+            await new Promise((resolve) =>
+              setTimeout(resolve, Math.pow(2, attempt) * 1000)
+            );
+          }
+        }
+      }
+
+      // EDGE CASE: Add delay between batches to avoid overwhelming the system
+      if (batchIndex < batches.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+
+    logger.info(
+      `Bulk notification complete: ${results.successful} successful, ${results.failed} failed`
+    );
+    return results;
+  } catch (error) {
+    logger.error("Failed to send bulk notifications:", error);
+    throw error;
+  }
+}
+
+/**
  * Notification templates for common scenarios
  */
 const NotificationTemplates = {
@@ -245,5 +349,6 @@ const NotificationTemplates = {
 module.exports = {
   createNotification,
   createBulkNotifications,
+  sendBulkNotificationsWithBatching,
   NotificationTemplates,
 };

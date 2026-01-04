@@ -79,6 +79,44 @@ exports.registerForEvent = asyncHandler(async (req, res) => {
   const isTeamEvent = maxTeamSize > 1;
   const isSoloEvent = maxTeamSize <= 1;
 
+  // EDGE CASE: Check user eligibility - Department
+  if (event.eligibleDepartments && event.eligibleDepartments.length > 0) {
+    const userDept = req.user.department || req.user.departmentId?.name;
+    if (!event.eligibleDepartments.includes(userDept)) {
+      throw new AppError(
+        `Your department (${
+          userDept || "Unknown"
+        }) is not eligible for this event. Eligible departments: ${event.eligibleDepartments.join(
+          ", "
+        )}`,
+        403
+      );
+    }
+  }
+
+  // EDGE CASE: Check user eligibility - Year of Study
+  if (event.eligibleYears && event.eligibleYears.length > 0) {
+    const userYear = req.user.yearOfStudy;
+    if (!event.eligibleYears.includes(userYear)) {
+      throw new AppError(
+        `Your year (${
+          userYear || "Unknown"
+        }) is not eligible for this event. Eligible years: ${event.eligibleYears.join(
+          ", "
+        )}`,
+        403
+      );
+    }
+  }
+
+  // EDGE CASE: Check external student eligibility
+  if (!event.allowExternalStudents && req.user.isOutsideCollege) {
+    throw new AppError(
+      "This event is only open to college students. External registrations are not allowed.",
+      403
+    );
+  }
+
   // CRITICAL: Enforce SOLO event - no teams allowed
   if (isSoloEvent && teamId) {
     throw new AppError(
@@ -186,19 +224,24 @@ exports.registerForEvent = asyncHandler(async (req, res) => {
       status: { $in: ["pending", "confirmed"] },
     });
 
-    if (event.maxParticipants && currentCount >= event.maxParticipants) {
-      throw new AppError(
-        `Event is full. Maximum ${event.maxParticipants} participants allowed.`,
-        400
-      );
-    }
-
-    // For paid events, registration status should be "pending" until payment is completed
-    const registrationStatus = event.isPaid
+    // EDGE CASE: Implement waitlist when event is full
+    let actualStatus = event.isPaid
       ? "pending"
       : event.requiresApproval
       ? "pending"
       : "confirmed";
+
+    if (event.maxParticipants && currentCount >= event.maxParticipants) {
+      // Add to waitlist instead of rejecting
+      logger.info(
+        `[REGISTRATION] Event ${eventId} is full. Adding user ${req.user._id} to waitlist.`
+      );
+      actualStatus = "waitlisted";
+    }
+
+    // For paid events, registration status should be "pending" until payment is completed
+    // Already set in actualStatus variable above
+    const registrationStatus = actualStatus;
 
     // Create registration (with or without session)
     const createOptions = session ? { session } : {};
@@ -687,6 +730,14 @@ exports.cancelRegistration = asyncHandler(async (req, res) => {
   const event = await Event.findById(registration.event);
   const hoursTillEvent = (event.startDateTime - new Date()) / (1000 * 60 * 60);
 
+  // EDGE CASE: Block cancellation after event has completed
+  if (event.status === "completed" || new Date() > event.endDateTime) {
+    throw new AppError(
+      "Cannot cancel registration after the event has ended",
+      400
+    );
+  }
+
   if (hoursTillEvent < 24) {
     throw new AppError(
       "Cannot cancel registration within 24 hours of event start",
@@ -703,17 +754,29 @@ exports.cancelRegistration = asyncHandler(async (req, res) => {
     const payment = await Payment.findById(registration.payment);
 
     if (payment && payment.status === "completed") {
-      // Calculate refund percentage based on time until event
-      let refundPercentage = 100; // Default 100% refund
+      // EDGE CASE: Calculate refund using event's configurable policy or default
+      const daysUntilEvent = hoursTillEvent / 24;
+      let refundPercentage = 0;
 
-      if (hoursTillEvent < 24) {
-        refundPercentage = 0; // No refund within 24 hours
-      } else if (hoursTillEvent < 48) {
-        refundPercentage = 50; // 50% refund within 48 hours
-      } else if (hoursTillEvent < 72) {
-        refundPercentage = 75; // 75% refund within 72 hours
+      if (event.refundPolicy && event.refundPolicy.length > 0) {
+        // Use event-specific refund policy (sorted, pick highest applicable)
+        const applicablePolicy = event.refundPolicy
+          .filter((p) => daysUntilEvent >= p.daysBeforeEvent)
+          .sort((a, b) => b.daysBeforeEvent - a.daysBeforeEvent)[0];
+
+        refundPercentage = applicablePolicy?.refundPercentage || 0;
+      } else {
+        // Default refund policy: 7+ days=100%, 3-7=75%, 1-3=50%, <1=0%
+        if (daysUntilEvent >= 7) {
+          refundPercentage = 100;
+        } else if (daysUntilEvent >= 3) {
+          refundPercentage = 75;
+        } else if (daysUntilEvent >= 1) {
+          refundPercentage = 50;
+        } else {
+          refundPercentage = 0;
+        }
       }
-      // else 100% refund (more than 72 hours)
 
       const refundAmount = (payment.amount * refundPercentage) / 100;
 
@@ -734,7 +797,11 @@ exports.cancelRegistration = asyncHandler(async (req, res) => {
       registration.paymentStatus = "refund_pending";
 
       logger.info(
-        `Refund created for registration ${registration._id}, amount: ${refundAmount} (${refundPercentage}% of ${payment.amount})`
+        `Refund created for registration ${
+          registration._id
+        }, amount: ${refundAmount} (${refundPercentage}% of ${
+          payment.amount
+        }, ${Math.ceil(daysUntilEvent)} days before event)`
       );
 
       // Store refund info for notification
@@ -742,6 +809,7 @@ exports.cancelRegistration = asyncHandler(async (req, res) => {
         refundPercentage,
         refundAmount,
         originalAmount: payment.amount,
+        daysUntilEvent: Math.ceil(daysUntilEvent),
       };
     }
   }

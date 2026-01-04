@@ -20,6 +20,22 @@ exports.createTeam = asyncHandler(async (req, res) => {
     throw new AppError("Event not found", 404);
   }
 
+  // EDGE CASE: Prevent team creation after registration deadline
+  if (
+    event.registrationDeadline &&
+    new Date() > new Date(event.registrationDeadline)
+  ) {
+    throw new AppError(
+      "Team creation is closed. Registration deadline has passed.",
+      400
+    );
+  }
+
+  // EDGE CASE: Prevent team creation for ongoing or completed events
+  if (["ongoing", "completed", "cancelled"].includes(event.status)) {
+    throw new AppError(`Cannot create teams for ${event.status} events.`, 400);
+  }
+
   // CRITICAL: Enforce SOLO event restriction
   const minTeamSize = event.minTeamSize || 1;
   const maxTeamSize = event.maxTeamSize || 1;
@@ -749,27 +765,68 @@ exports.updateTeam = asyncHandler(async (req, res) => {
  * @access  Private
  */
 exports.leaveTeam = asyncHandler(async (req, res) => {
-  const team = await Team.findById(req.params.id);
+  const team = await Team.findById(req.params.id).populate(
+    "members",
+    "fullName email"
+  );
 
   if (!team) {
     throw new AppError("Team not found", 404);
   }
 
   // Check if user is a member
-  if (!team.members.some((m) => m.toString() === req.user._id.toString())) {
+  if (!team.members.some((m) => m._id.toString() === req.user._id.toString())) {
     throw new AppError("You are not a member of this team", 400);
-  }
-
-  // Team leader cannot leave, must transfer leadership first
-  if (team.leader.toString() === req.user._id.toString()) {
-    throw new AppError(
-      "Team leader cannot leave. Transfer leadership first.",
-      400
-    );
   }
 
   if (team.status === "locked") {
     throw new AppError("Cannot leave locked team", 400);
+  }
+
+  // EDGE CASE: Handle team leader leaving - auto-transfer leadership
+  if (team.leader.toString() === req.user._id.toString()) {
+    if (team.members.length <= 1) {
+      // Last member - disband team
+      team.status = "disbanded";
+      await team.save();
+
+      logger.info(
+        `[leaveTeam] Team ${team._id} disbanded as leader was last member`
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Team disbanded as you were the last member",
+      });
+    }
+
+    // Transfer leadership to the next member (first member after leader)
+    const newLeader = team.members.find(
+      (m) => m._id.toString() !== req.user._id.toString()
+    );
+
+    if (!newLeader) {
+      throw new AppError(
+        "Cannot find suitable member to transfer leadership",
+        500
+      );
+    }
+
+    team.leader = newLeader._id;
+    logger.info(
+      `[leaveTeam] Leadership transferred from ${req.user._id} to ${newLeader._id}`
+    );
+
+    // Send notification to new leader
+    const Notification = require("../models/Notification");
+    await Notification.create({
+      recipient: newLeader._id,
+      title: `You are now the team leader of "${team.name}"`,
+      message: `The previous leader has left the team. You have been automatically assigned as the new team leader.`,
+      type: "team_leadership_transfer",
+      relatedEvent: team.event,
+      priority: "high",
+    });
   }
 
   // Remove user from members

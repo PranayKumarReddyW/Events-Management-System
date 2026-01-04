@@ -36,9 +36,31 @@ exports.initiatePayment = asyncHandler(async (req, res) => {
     );
   }
 
+  // EDGE CASE: Prevent payment after event has started
+  if (
+    registration.event.status === "ongoing" ||
+    registration.event.status === "completed"
+  ) {
+    throw new AppError(
+      `Cannot process payment for ${registration.event.status} events.`,
+      400
+    );
+  }
+
   // Check if already paid
   if (registration.paymentStatus === "paid") {
     throw new AppError("Payment already completed", 400);
+  }
+
+  // EDGE CASE: Check if registration was cancelled
+  if (
+    registration.status === "cancelled" ||
+    registration.status === "rejected"
+  ) {
+    throw new AppError(
+      `Cannot process payment for ${registration.status} registration.`,
+      400
+    );
   }
 
   // Check if event requires payment
