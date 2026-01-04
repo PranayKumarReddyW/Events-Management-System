@@ -133,20 +133,16 @@ export default function RoundManagementPage() {
 
   const loadEventData = async () => {
     if (!eventId) {
-      console.error("No eventId provided");
       return;
     }
 
     try {
       setIsLoading(true);
-      console.log("Loading event data for ID:", eventId);
 
       // Load event details
       const eventRes = await eventsApi.getEvent(eventId);
-      console.log("Event response:", eventRes);
 
       const eventData = eventRes.data?.event;
-      console.log("Event data:", eventData);
 
       if (!eventData) {
         throw new Error("Event data not found in response");
@@ -156,13 +152,9 @@ export default function RoundManagementPage() {
       setRounds(eventData?.rounds || []);
       setCurrentRound(eventData?.currentRound || 0);
 
-      console.log("Rounds:", eventData?.rounds);
-      console.log("Current round:", eventData?.currentRound);
-
       // Load round stats
       try {
         const statsRes = await eventsApi.getRoundStats(eventId);
-        console.log("Stats response:", statsRes);
         setRoundStats((statsRes as any).data?.data || []);
       } catch (statsError: any) {
         console.error("Failed to load round stats:", statsError);
@@ -186,34 +178,28 @@ export default function RoundManagementPage() {
 
   const loadRoundParticipants = async (roundNumber: number) => {
     if (!eventId) {
-      console.error("No eventId for loading participants");
       return;
     }
 
     try {
       setIsLoadingParticipants(true);
-      console.log("Loading participants for round:", roundNumber);
 
       if (roundNumber === 0) {
         // Load all initial registrations
         const res = await registrationsApi.getEventRegistrations(eventId, {
           status: "confirmed",
         });
-        console.log("Initial registrations response:", res);
         const allParticipants = res.data?.data || [];
-        console.log("All participants:", allParticipants);
 
         // Filter to only show those still in round 0 (not advanced yet)
         const round0Participants = allParticipants.filter(
           (p: any) =>
             (!p.currentRound || p.currentRound === 0) && !p.eliminatedInRound
         );
-        console.log("Round 0 participants:", round0Participants);
         setParticipants(round0Participants);
       } else {
         // Load specific round participants
         const res = await eventsApi.getRoundParticipants(eventId, roundNumber);
-        console.log("Round participants response:", res);
         setParticipants((res as any).data?.data?.participants || []);
       }
 
@@ -283,25 +269,12 @@ export default function RoundManagementPage() {
       status: "upcoming",
     };
 
-    console.log("[ADD ROUND] Starting round addition");
-    console.log("[ADD ROUND] Event ID:", eventId);
-    console.log("[ADD ROUND] Round data:", roundData);
-
     try {
       setIsProcessing(true);
       const response = await eventsApi.addRound(eventId, roundData);
 
-      console.log("[ADD ROUND] API response:", response);
-      console.log(
-        "[ADD ROUND] Success! Response data:",
-        (response as any).data
-      );
-
       if ((response as any).data?.event?.rounds) {
-        console.log(
-          "[ADD ROUND] Event now has rounds:",
-          (response as any).data.event.rounds
-        );
+        // Rounds successfully added
       }
 
       toast.success("Round added successfully");
@@ -314,12 +287,8 @@ export default function RoundManagementPage() {
         maxParticipants: "",
       });
 
-      console.log("[ADD ROUND] Reloading event data...");
       await loadEventData();
     } catch (error: any) {
-      console.error("[ADD ROUND] Error:", error);
-      console.error("[ADD ROUND] Error response:", error.response);
-      console.error("[ADD ROUND] Error data:", error.response?.data);
       toast.error(error.response?.data?.message || "Failed to add round");
     } finally {
       setIsProcessing(false);

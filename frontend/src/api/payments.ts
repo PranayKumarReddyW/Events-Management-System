@@ -92,13 +92,8 @@ export const paymentsApi = {
   },
 
   // Get my payments
-  getMyPayments: async (
-    filters?: PaymentFilters
-  ): Promise<PaymentsApiResponse> => {
-    return apiClient.get<PaymentsApiResponse>(
-      "/payments/my",
-      filters
-    ) as Promise<PaymentsApiResponse>;
+  getMyPayments: async (filters?: PaymentFilters) => {
+    return apiClient.get<PaymentsApiResponse>("/payments/my", filters);
   },
 
   // Request refund
@@ -107,14 +102,11 @@ export const paymentsApi = {
   },
 
   // Get event payments (organizer+)
-  getEventPayments: async (
-    eventId: string,
-    filters?: PaymentFilters
-  ): Promise<PaymentsApiResponse> => {
+  getEventPayments: async (eventId: string, filters?: PaymentFilters) => {
     return apiClient.get<PaymentsApiResponse>(
       `/payments/event/${eventId}`,
       filters
-    ) as Promise<PaymentsApiResponse>;
+    );
   },
 
   // Process refund (organizer+)

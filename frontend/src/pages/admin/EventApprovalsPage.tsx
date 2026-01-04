@@ -62,7 +62,7 @@ export default function EventApprovalsPage() {
 
   useEffect(() => {
     fetchEvents();
-  }, [filters]);
+  }, [filters.status, filters.search, filters.page, filters.limit]);
 
   const fetchEvents = async () => {
     try {

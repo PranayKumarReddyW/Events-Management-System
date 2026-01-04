@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import LoginPage from "@/pages/auth/LoginPage";
 import RegisterPage from "@/pages/auth/RegisterPage";
@@ -33,7 +33,6 @@ import ResultsManagementPage from "@/pages/organizer/ResultsManagementPage";
 import EventAnalyticsPage from "@/pages/events/EventAnalyticsPage";
 import NotFoundPage from "@/pages/NotFoundPage";
 import UnauthorizedPage from "@/pages/UnauthorizedPage";
-import DebugRoundsPage from "@/pages/debug/DebugRoundsPage";
 
 // Smart redirect based on user role
 function DashboardRedirect() {
@@ -87,9 +86,6 @@ export default function AppRoutes() {
       />
       <Route path="/auth/register" element={<RegisterPage />} />
       <Route path="/unauthorized" element={<UnauthorizedPage />} />
-
-      {/* Debug route - Remove in production */}
-      <Route path="/debug/rounds" element={<DebugRoundsPage />} />
 
       {/* Protected routes */}
       <Route

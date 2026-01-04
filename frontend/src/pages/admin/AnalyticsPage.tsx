@@ -135,30 +135,9 @@ export default function AnalyticsPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {analytics?.topEvents?.map((event: any, index: number) => (
-                  <div
-                    key={event._id}
-                    className="flex items-center justify-between p-3 rounded-lg border"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-semibold">
-                        {index + 1}
-                      </div>
-                      <div>
-                        <p className="font-medium line-clamp-1">
-                          {event.title}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {event.registrationCount} registrations
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )) || (
-                  <p className="text-center text-muted-foreground py-8">
-                    No events data available
-                  </p>
-                )}
+                <p className="text-center text-muted-foreground py-8">
+                  Top events data coming soon
+                </p>
               </div>
             )}
           </CardContent>
@@ -180,21 +159,9 @@ export default function AnalyticsPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {analytics?.revenueByType?.map((item: any) => (
-                  <div
-                    key={item.type}
-                    className="flex items-center justify-between p-3 rounded-lg border"
-                  >
-                    <span className="font-medium capitalize">{item.type}</span>
-                    <span className="text-lg font-semibold">
-                      {formatCurrency(item.revenue)}
-                    </span>
-                  </div>
-                )) || (
-                  <p className="text-center text-muted-foreground py-8">
-                    No revenue data available
-                  </p>
-                )}
+                <p className="text-center text-muted-foreground py-8">
+                  Revenue details coming soon
+                </p>
               </div>
             )}
           </CardContent>

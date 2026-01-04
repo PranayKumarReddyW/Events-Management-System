@@ -62,10 +62,6 @@ const MyRegistrationsPage = () => {
   const { data: registrations, isLoading } = useMyRegistrations(filters);
   const cancelRegistration = useCancelRegistration();
 
-  // Debug: Log registrations data
-  console.log("Registrations data:", registrations);
-  console.log("Registrations.data:", registrations?.data);
-
   const handleCancelRegistration = async (registrationId: string) => {
     // NULL CHECK: Validate registrationId
     if (!registrationId) {
@@ -521,6 +517,7 @@ const MyRegistrationsPage = () => {
                       {registration.event.isPaid &&
                         registration.paymentStatus === "pending" &&
                         // TEAM PAYMENT: Only show pay button for solo events or team leader
+                        user &&
                         (!registration.team ||
                           registration.team.leader === user._id ||
                           registration.team.leader?._id === user._id) && (
@@ -540,6 +537,7 @@ const MyRegistrationsPage = () => {
                       {registration.event.isPaid &&
                         registration.paymentStatus === "pending" &&
                         registration.team &&
+                        user &&
                         registration.team.leader !== user._id &&
                         registration.team.leader?._id !== user._id && (
                           <span className="text-xs text-muted-foreground px-2">

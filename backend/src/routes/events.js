@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const eventController = require("../controllers/eventController");
-const roundController = require("../controllers/roundController");
+const strictRoundController = require("../controllers/strictRoundController");
 const resultController = require("../controllers/resultController");
 const registrationController = require("../controllers/registrationController");
 const analyticsController = require("../controllers/analyticsController");
@@ -55,29 +55,29 @@ router.delete("/:id", auditDelete("event"), eventController.deleteEvent);
 // Publish event
 router.post("/:id/publish", eventController.publishEvent);
 
-// Round management routes
+// Round management routes - STRICT VALIDATION
 router.post(
   "/:eventId/rounds",
   authorize("department_organizer", "faculty", "admin", "super_admin"),
-  roundController.addRound
+  strictRoundController.createRound
 );
 
 router.put(
   "/:eventId/rounds/:roundId",
   authorize("department_organizer", "faculty", "admin", "super_admin"),
-  roundController.updateRound
+  strictRoundController.updateRound
 );
 
 router.delete(
   "/:eventId/rounds/:roundId",
   authorize("department_organizer", "faculty", "admin", "super_admin"),
-  roundController.deleteRound
+  strictRoundController.deleteRound
 );
 
 router.post(
-  "/:eventId/rounds/:roundNumber/advance",
+  "/:eventId/rounds/:roundNumber/progress-teams",
   authorize("department_organizer", "faculty", "admin", "super_admin"),
-  roundController.advanceParticipants
+  strictRoundController.progressTeams
 );
 
 router.get(

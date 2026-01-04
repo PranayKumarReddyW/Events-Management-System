@@ -296,27 +296,10 @@ export default function CreateEventPage() {
         setAdditionalImages(event.images);
       }
     }
-  }, [event, isEditMode, form]);
+  }, [event, isEditMode]);
 
   const onSubmit = async (data: EventFormValues) => {
     try {
-      // Define locked fields that cannot be updated after event starts
-      const lockedFields = [
-        "title",
-        "eventType",
-        "startDateTime",
-        "endDateTime",
-        "minTeamSize",
-        "maxTeamSize",
-        "isPaid",
-        "registrationFee",
-        "eligibility",
-        "eligibleYears",
-        "eligibleDepartments",
-        "allowExternalStudents",
-        "requiresApproval",
-      ];
-
       // Filter out locked fields if event has already started
       const shouldFilterLockedFields = isEventLocked && isEditMode;
 

@@ -7,7 +7,10 @@ const morgan = require("morgan");
 const path = require("path");
 const fs = require("fs/promises");
 const logger = require("./utils/logger");
-const { errorHandler, notFound } = require("./middleware/errorHandler");
+const {
+  errorHandler,
+  notFoundHandler,
+} = require("./middleware/strictErrorHandler");
 const { apiLimiter } = require("./middleware/rateLimiter");
 const { sanitizeInput } = require("./middleware/validation");
 
@@ -133,7 +136,7 @@ app.use("/api/v1", routes);
 app.get("/api/v1/docs", (req, res) => res.redirect(302, "/api/docs"));
 
 // 404 handler - must be after all routes
-app.use(notFound);
+app.use(notFoundHandler);
 
 // Global error handler - must be last
 app.use(errorHandler);

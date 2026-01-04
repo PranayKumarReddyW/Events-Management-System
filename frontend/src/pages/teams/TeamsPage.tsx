@@ -24,7 +24,8 @@ export default function TeamsPage() {
   // Refetch teams when component mounts to ensure fresh data
   useEffect(() => {
     refetch();
-  }, [refetch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="space-y-6">

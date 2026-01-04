@@ -112,7 +112,8 @@ export default function UsersPage() {
   });
 
   const users = usersResponse?.data?.users || usersResponse?.data || [];
-  const filteredUsers = users.filter(
+  const userArray = Array.isArray(users) ? users : [];
+  const filteredUsers = userArray.filter(
     (user: any) =>
       user.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.email?.toLowerCase().includes(searchQuery.toLowerCase())

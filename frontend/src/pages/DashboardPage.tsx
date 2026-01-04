@@ -21,7 +21,7 @@ import {
   Plus,
   ArrowRight,
 } from "lucide-react";
-import { formatDate, getEventStatus } from "@/utils/date";
+import { formatDate } from "@/utils/date";
 import { formatCurrency } from "@/utils/helpers";
 
 export default function DashboardPage() {
@@ -40,8 +40,7 @@ export default function DashboardPage() {
     sortBy: "startDate",
     order: "asc",
   });
-  const { data: registrations, isLoading: registrationsLoading } =
-    useMyRegistrations({ limit: 5 });
+  const { data: registrations } = useMyRegistrations({ limit: 5 });
 
   const stats = [
     {

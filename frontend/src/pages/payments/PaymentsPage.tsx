@@ -28,7 +28,8 @@ export default function PaymentsPage() {
   const filters = statusFilter !== "all" ? { status: statusFilter as any } : {};
   const { data: paymentsResponse, isLoading } = usePayments(filters);
 
-  const payments = paymentsResponse?.data?.payments || [];
+  const payments =
+    (paymentsResponse?.data as any)?.payments || paymentsResponse?.data || [];
 
   const handleDownloadInvoice = async (
     paymentId: string,

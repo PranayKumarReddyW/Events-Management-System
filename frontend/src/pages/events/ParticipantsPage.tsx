@@ -144,20 +144,28 @@ export default function ParticipantsPage() {
     } finally {
       setLoading(false);
     }
-  }, [eventId, selectedRound, filters]);
+  }, [eventId, selectedRound]);
 
   useEffect(() => {
     if (eventId) {
       fetchEvent();
       fetchRoundStats();
     }
-  }, [eventId, fetchEvent, fetchRoundStats]);
+  }, [eventId]);
 
   useEffect(() => {
     if (eventId) {
       fetchRegistrations();
     }
-  }, [eventId, fetchRegistrations]);
+  }, [
+    eventId,
+    selectedRound,
+    filters.status,
+    filters.paymentStatus,
+    filters.search,
+    filters.page,
+    filters.limit,
+  ]);
 
   const handleAdvanceSelected = async () => {
     if (selectedParticipants.length === 0) {
